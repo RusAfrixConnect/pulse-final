@@ -6,6 +6,10 @@ import {
 } from 'react-native';
 import MapView, { Marker, Circle } from 'react-native-maps';
 import { Linking } from 'react-native';
+import VALTDashboard from './screens/VALTDashboard';
+import CreatePledgeScreen from './screens/CreatePledgeScreen';
+import { GenerateQRScreen, ScanQRScreen } from './screens/QRScreen';
+import { walletService } from './services/valtService';
 
 const translations = {
   fr: {
@@ -241,61 +245,7 @@ const MOCK_BUSINESSES = [
 ];
 
 // ── WALLET BSC RÉEL ──────────────────────────
-const ZND_CONTRACT = '0x3BcE58FC2C2BB0653dC757Ba0bc5328d4f2f15A9';
-const BSC_RPC      = 'https://bsc-dataseed.binance.org/';
 const API_URL      = 'https://pulse-backend-9zpb.onrender.com';
-const ZND_ABI = [
-  'function balanceOf(address) view returns (uint256)',
-  'function transfer(address to, uint256 amount) returns (bool)',
-  'function decimals() view returns (uint8)',
-];
-
-const getZndBalance = async (address) => {
-  try {
-    const cleanAddress = address.replace('0x', '').toLowerCase();
-    const paddedAddress = '0000000000000000000000000000000000000000000000000000000000000000'.slice(0, 64 - 40) + cleanAddress;
-    const response = await fetch(BSC_RPC, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        jsonrpc: '2.0',
-        method: 'eth_call',
-        params: [{
-          to: ZND_CONTRACT,
-          data: '0x70a08231' + paddedAddress
-        }, 'latest'],
-        id: 1,
-      }),
-    });
-    const data = await response.json();
-    if (data.result && data.result !== '0x') {
-      const balanceBigInt = BigInt(data.result);
-      const divisor = BigInt('1000000000000000000');
-      const balance = Number(balanceBigInt / divisor);
-    return balance.toString();
-    }
-    return '0';
-  } catch (err) {
-    console.log('Erreur BSC:', err);
-    return '0';
-  }
-};
-
-const sendZnd = async (privateKey, toAddress, amount) => {
-  try {
-    const { ethers } = require('ethers');
-    const provider  = new ethers.providers.JsonRpcProvider(BSC_RPC);
-    const wallet    = new ethers.Wallet(privateKey, provider);
-    const contract  = new ethers.Contract(ZND_CONTRACT, ZND_ABI, wallet);
-    const decimals  = await contract.decimals();
-    const amountWei = ethers.utils.parseUnits(amount.toString(), decimals);
-    const tx        = await contract.transfer(toAddress, amountWei);
-    await tx.wait();
-    return { success: true, hash: tx.hash };
-  } catch (err) {
-    return { success: false, error: err.message };
-  }
-};
 
 export default function App() {
   const [screen, setScreen]         = useState('map_preview');
@@ -365,7 +315,7 @@ const [stories, setStories]               = useState([
 const [showCreateStory, setShowCreateStory] = useState(false);
 const [showStory, setShowStory]             = useState(null);
 const [newStory, setNewStory]               = useState({ text: '', emoji: '😊' });
- const [privateKey, setPrivateKey]               = useState('');
+ const [importInput, setImportInput]             = useState('');
 const [showWalletConnect, setShowWalletConnect] = useState(false);
 const [matchSuggestions, setMatchSuggestions] = useState([]);
 // CERCLES D'AMIS
@@ -376,6 +326,38 @@ const [friendsLocations, setFriendsLocations] = useState([
 ]);
 const [showFriendsMap, setShowFriendsMap] = useState(false);
 const [sharingLocation, setSharingLocation] = useState(false);
+// PULSE SCORE
+const [pulseScore, setPulseScore] = useState(0);
+
+const calculatePulseScore = (user) => {
+  let score = 0;
+  score += Math.min((user?.znd || 0) / 100, 300);
+  score += myTerritories.length * 50;
+  score += stories.length * 20;
+  score += jobs.filter(j => j.userId === user?.id).length * 30;
+  return Math.min(Math.round(score), 1000);
+};
+// TERRITOIRES
+const [territories, setTerritories] = useState([
+  { id: 1, name: 'Zone Paris Centre', owner: 'Marcus', avatar: '🧑',
+    lat: 48.857, lng: 2.352, radius: 300, zndPerHour: 5,
+    color: 'rgba(107,33,168,0.3)', captured: false },
+  { id: 2, name: 'Zone Montmartre', owner: null,
+    lat: 48.886, lng: 2.343, radius: 300, zndPerHour: 3,
+    color: 'rgba(201,168,76,0.2)', captured: false },
+  { id: 3, name: 'Zone Mumbai', owner: 'Priya', avatar: '👩',
+    lat: 19.076, lng: 72.877, radius: 500, zndPerHour: 8,
+    color: 'rgba(239,68,68,0.2)', captured: false },
+  { id: 4, name: 'Zone Delhi', owner: null,
+    lat: 28.613, lng: 77.209, radius: 400, zndPerHour: 4,
+    color: 'rgba(201,168,76,0.2)', captured: false },
+  { id: 5, name: 'Zone Lagos', owner: null,
+    lat: 6.524, lng: 3.379, radius: 500, zndPerHour: 6,
+    color: 'rgba(201,168,76,0.2)', captured: false },
+]);
+const [showTerritory, setShowTerritory] = useState(null);
+const [myTerritories, setMyTerritories] = useState([]);
+const [territoryZnd, setTerritoryZnd]   = useState(0);
 // TRANSFERTS ZND
 const [showSendZnd, setShowSendZnd]     = useState(false);
 const [sendToAddress, setSendToAddress] = useState('');
@@ -464,7 +446,7 @@ const [newProduct, setNewProduct]       = useState({
   // Lire solde ZND réel
   useEffect(() => {
     if (authUser?.walletAddress) {
-      getZndBalance(authUser.walletAddress).then(balance => {
+      walletService.getZNDBalance().then(balance => {
         setAuthUser(prev => ({ ...prev, znd: parseFloat(balance) }));
       });
     }
@@ -502,7 +484,8 @@ const handleRegister = async () => {
       });
       const data = await response.json();
       if (data.success) {
-        setAuthUser({ ...data.user, interests: ['sport', 'social'] });
+        const walletAddress = data.user.walletAddress || await walletService.getAddress();
+        setAuthUser({ ...data.user, walletAddress, interests: ['sport', 'social'] });
         generateMatches(['sport', 'social']);
         setScreen('app');
       } else {
@@ -527,7 +510,8 @@ const handleLogin = async () => {
       });
       const data = await response.json();
       if (data.success) {
-        setAuthUser({ ...data.user, interests: ['sport', 'job'] });
+        const walletAddress = data.user.walletAddress || await walletService.getAddress();
+        setAuthUser({ ...data.user, walletAddress, interests: ['sport', 'job'] });
         generateMatches(['sport', 'job']);
         setScreen('app');
       } else {
@@ -602,6 +586,8 @@ const handleLogin = async () => {
       setIsTracking(false);
       clearInterval(earnInterval.current);
       if (zndEarned > 0) {
+        // Crédit optimiste local uniquement : pas de mint/transfer on-chain.
+        // Écrasé par le prochain sync walletService.getZNDBalance() (ex: reconnexion).
         setAuthUser(prev => ({ ...prev, znd: (prev?.znd || 0) + zndEarned }));
         addNotification(`🏃 +${zndEarned} ZND gagnés en marchant !`, 'znd');
         setZndEarned(0);
@@ -612,7 +598,7 @@ const handleLogin = async () => {
 
   const collectTreasure = (treasure) => {
     setTreasures(prev => prev.map(tr => tr.id === treasure.id ? { ...tr, found: true } : tr));
-    setAuthUser(prev => ({ ...prev, znd: (prev?.znd || 0) + treasure.znd }));
+    setAuthUser(prev => ({ ...prev, znd: (prev?.znd || 0) + treasure.znd })); // optimiste local, non on-chain
     addNotification(`💎 +${treasure.znd} ZND collectés !`, 'znd');
     setTreasureFound(null);
   };
@@ -641,13 +627,9 @@ const handleLogin = async () => {
 
   // ── ENVOI ZND RÉEL ──
   const sendZndToUser = async (toAddress, amount) => {
-    if (!privateKey) {
-      setShowWalletConnect(true);
-      return;
-    }
     try {
       addNotification('Transaction en cours...', 'znd');
-      const result = await sendZnd(privateKey, toAddress, amount);
+      const result = await walletService.transferZNDOnChain(toAddress, amount);
       if (result.success) {
         addNotification('ZND envoyes avec succes !', 'znd');
         setAuthUser(prev => ({ ...prev, znd: (prev?.znd || 0) - amount }));
@@ -731,6 +713,31 @@ const handleLogin = async () => {
         { backgroundColor: friend.online ? '#10b981' : '#6b7280' }]} />
     </View>
   </Marker>
+))}
+{/* TERRITOIRES */}
+{territories.map(territory => (
+  <React.Fragment key={`terr-${territory.id}`}>
+    <Circle
+      center={{ latitude: territory.lat, longitude: territory.lng }}
+      radius={territory.radius}
+      fillColor={territory.color}
+      strokeColor={territory.owner ? '#a78bfa' : '#C9A84C'}
+      strokeWidth={2}
+    />
+    <Marker
+      coordinate={{ latitude: territory.lat, longitude: territory.lng }}
+      anchor={{ x: 0.5, y: 0.5 }}
+      onPress={() => setShowTerritory(territory)}>
+      <View style={styles.territoryMarker}>
+        <Text style={{ fontSize: 16 }}>
+          {territory.owner ? territory.avatar : '🏴'}
+        </Text>
+        <Text style={styles.territoryZnd}>
+          +{territory.zndPerHour} ZND/h
+        </Text>
+      </View>
+    </Marker>
+  </React.Fragment>
 ))}
 {/* LIVES SUR LA CARTE */}
 {lives.map(live => (
@@ -1266,7 +1273,7 @@ const handleLogin = async () => {
       const data = await response.json();
       if (data.success) {
         MOCK_EVENTS.push({
-          id: data.event.id,
+          id: 'new-' + data.event.id,
           type: data.event.type,
           title: data.event.title,
           description: data.event.description,
@@ -1450,7 +1457,7 @@ const handleLogin = async () => {
               borderWidth: 1, borderColor: '#C9A84C' }]}
             onPress={() => {
               addNotification('Envoye ' + amount + ' ZND au live !', 'znd');
-              setAuthUser(prev => ({ ...prev, znd: (prev?.znd || 0) - amount }));
+              setAuthUser(prev => ({ ...prev, znd: (prev?.znd || 0) - amount })); // optimiste local, non on-chain
             }}>
             <Text style={{ color: '#C9A84C', fontWeight: '700' }}>
               💎 {amount} ZND
@@ -1556,7 +1563,7 @@ const handleLogin = async () => {
       onPress={() => {
         setMyLive(null);
         clearInterval(liveInterval.current);
-        setAuthUser(prev => ({ ...prev, znd: (prev?.znd || 0) + liveZnd }));
+        setAuthUser(prev => ({ ...prev, znd: (prev?.znd || 0) + liveZnd })); // optimiste local, non on-chain
         addNotification('Live termine ! +' + liveZnd + ' ZND gagnes !', 'znd');
         setLiveViewers(0);
         setLiveZnd(0);
@@ -1567,6 +1574,84 @@ const handleLogin = async () => {
     </TouchableOpacity>
   </View>
 )}
+{/* MODAL TERRITOIRE */}
+<Modal visible={!!showTerritory} animationType="slide" transparent>
+  <View style={styles.modalOverlay}>
+    <View style={styles.modalContent}>
+      <TouchableOpacity style={styles.modalClose} onPress={() => setShowTerritory(null)}>
+        <Text style={styles.searchClose}>✕</Text>
+      </TouchableOpacity>
+      {showTerritory && (
+        <View style={{ gap: 16 }}>
+          <View style={{ alignItems: 'center' }}>
+            <Text style={{ fontSize: 48 }}>
+              {showTerritory.owner ? showTerritory.avatar : '🏴'}
+            </Text>
+            <Text style={styles.profileName}>{showTerritory.name}</Text>
+            {showTerritory.owner ? (
+              <Text style={{ color: '#a78bfa', fontSize: 14 }}>
+                Propriétaire : {showTerritory.owner}
+              </Text>
+            ) : (
+              <Text style={{ color: '#C9A84C', fontSize: 14 }}>
+                Zone libre à capturer !
+              </Text>
+            )}
+          </View>
+
+          <View style={styles.walletInfoBox}>
+            <Text style={styles.walletInfoText}>
+              💎 +{showTerritory.zndPerHour} ZND/heure
+            </Text>
+            <Text style={styles.walletInfoSub}>
+              Revenus passifs automatiques
+            </Text>
+          </View>
+
+          {!myTerritories.find(t => t.id === showTerritory.id) ? (
+            <TouchableOpacity
+              style={styles.btnPrimary}
+              onPress={() => {
+                const cost = 100;
+                if ((authUser?.znd || 0) < cost) {
+                  alert('Il te faut 100 ZND pour capturer ce territoire !');
+                  return;
+                }
+                setAuthUser(prev => ({ ...prev, znd: (prev?.znd || 0) - cost })); // optimiste local, non on-chain
+                setMyTerritories(prev => [...prev, showTerritory]);
+                setTerritories(prev => prev.map(t =>
+                  t.id === showTerritory.id
+                    ? { ...t, owner: authUser?.name, avatar: '🧑', color: 'rgba(107,33,168,0.3)' }
+                    : t
+                ));
+                addNotification('Territoire capture ! +' + showTerritory.zndPerHour + ' ZND/h', 'znd');
+                setShowTerritory(null);
+              }}>
+              <Text style={styles.btnPrimaryText}>
+                ⚔️ Capturer pour 100 ZND
+              </Text>
+            </TouchableOpacity>
+          ) : (
+            <View style={styles.walletInfoBox}>
+              <Text style={{ color: '#10b981', textAlign: 'center', fontWeight: '700' }}>
+                ✅ Tu possèdes ce territoire !
+              </Text>
+              <Text style={{ color: '#9b8cb0', textAlign: 'center', fontSize: 12, marginTop: 4 }}>
+                +{showTerritory.zndPerHour} ZND/heure en cours...
+              </Text>
+            </View>
+          )}
+
+          <TouchableOpacity
+            style={styles.btnSecondary}
+            onPress={() => setShowTerritory(null)}>
+            <Text style={styles.btnSecondaryText}>Fermer</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+    </View>
+  </View>
+</Modal>
       {/* MODAL TRÉSOR */}
       <Modal visible={!!treasureFound} animationType="slide" transparent>
         <View style={styles.modalOverlay}>
@@ -1643,8 +1728,8 @@ const handleLogin = async () => {
             <Text style={styles.profileStatLabel}>{t('activities')}</Text>
           </View>
           <View style={styles.profileStat}>
-            <Text style={styles.profileStatVal}>850</Text>
-            <Text style={styles.profileStatLabel}>{t('score')}</Text>
+            <Text style={styles.profileStatVal}>{calculatePulseScore(authUser)}</Text>
+            <Text style={styles.profileStatLabel}>Score</Text>
           </View>
         </View>
       </View>
@@ -1656,55 +1741,18 @@ const handleLogin = async () => {
         <Text style={styles.walletSub}>≈ {((authUser?.znd || 0) * 0.005).toFixed(2)} € · BSC Mainnet</Text>
 
         {/* CHAMP ADRESSE WALLET */}
-        {!authUser?.walletAddress ? (
-          <View style={{ width: '100%', marginTop: 12 }}>
-            <TextInput
-              style={{
-                backgroundColor: 'rgba(255,255,255,0.05)',
-                borderRadius: 8, padding: 10, color: '#e8e0f0',
-                borderWidth: 1, borderColor: 'rgba(167,139,250,0.3)',
-                fontSize: 11, marginBottom: 8,
-              }}
-              placeholder="0x... ton adresse BSC"
-              placeholderTextColor="#6b7280"
-              onChangeText={v => setAuthUser(prev => ({ ...prev, walletInput: v }))}
-              value={authUser?.walletInput || ''}
-            />
-            <TouchableOpacity
-              style={{ backgroundColor: '#6B21A8', padding: 10,
-                borderRadius: 8, alignItems: 'center' }}
-              onPress={() => {
-                const addr = authUser?.walletInput;
-                if (!addr || !addr.startsWith('0x')) {
-                  alert('Adresse invalide');
-                  return;
-                }
-                getZndBalance(addr).then(balance => {
-                  setAuthUser(prev => ({
-                    ...prev,
-                    walletAddress: addr,
-                    znd: parseFloat(balance),
-                  }));
-                  alert('Wallet connecté ! Solde : ' + balance + ' ZND');
-                });
-              }}>
-              <Text style={{ color: '#fff', fontWeight: '700' }}>
-                🔗 Connecter mon wallet
-              </Text>
-            </TouchableOpacity>
-          </View>
-        ) : (
-          <View style={{ width: '100%', marginTop: 12 }}>
-            <Text style={{ color: '#10b981', fontSize: 11, textAlign: 'center' }}>
-              ✅ {authUser.walletAddress.slice(0, 6)}...{authUser.walletAddress.slice(-4)}
-            </Text>
-            <TouchableOpacity
-              style={{ marginTop: 8, alignItems: 'center' }}
-              onPress={() => setAuthUser(prev => ({ ...prev, walletAddress: null }))}>
-              <Text style={{ color: '#ef4444', fontSize: 11 }}>Déconnecter</Text>
-            </TouchableOpacity>
-          </View>
-        )}
+        <View style={{ width: '100%', marginTop: 12 }}>
+          <Text style={{ color: '#10b981', fontSize: 11, textAlign: 'center' }}>
+            {authUser?.walletAddress
+              ? `✅ ${authUser.walletAddress.slice(0, 6)}...${authUser.walletAddress.slice(-4)}`
+              : 'Création du wallet...'}
+          </Text>
+          <TouchableOpacity
+            style={{ marginTop: 8, alignItems: 'center' }}
+            onPress={() => setShowWalletConnect(true)}>
+            <Text style={{ color: '#a78bfa', fontSize: 11 }}>🔑 Importer un wallet existant</Text>
+          </TouchableOpacity>
+        </View>
 
         <TouchableOpacity style={styles.walletBtn} onPress={() => setActiveTab('shop')}>
           <Text style={styles.walletBtnText}>+ {t('buyZnd')}</Text>
@@ -1751,59 +1799,6 @@ const handleLogin = async () => {
           </TouchableOpacity>
         ))}
       </ScrollView>
-
-<TouchableOpacity
-        style={{
-          backgroundColor: 'rgba(107,33,168,0.4)',
-          padding: 20,
-          borderRadius: 12,
-          alignItems: 'center',
-          marginBottom: 16,
-          borderWidth: 2,
-          borderColor: '#a78bfa',
-          minHeight: 60,
-        }}
-        activeOpacity={0.5}
-        onPress={() => {
-          getZndBalance('0xC24dDB5dFe6F89fd2e40A661051667328EC09F30').then(b => alert(b));
-        }}>
-        <Text style={{ color: '#fff', fontSize: 18, fontWeight: '700' }}>
-          Tester BSC
-        </Text>
-      </TouchableOpacity>
-
-<TouchableOpacity
-  style={{ backgroundColor: 'rgba(107,33,168,0.4)', padding: 20,
-    borderRadius: 12, alignItems: 'center', marginBottom: 16,
-    borderWidth: 2, borderColor: '#a78bfa', minHeight: 60 }}
-  onPress={() => {
-    fetch(BSC_RPC, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        jsonrpc: '2.0',
-        method: 'eth_call',
-        params: [{
-          to: '0x3BcE58FC2C2BB0653dC757Ba0bc5328d4f2f15A9',
-          data: '0x70a08231' + '0000000000000000000000000000000000000000000000000000000000000000'.slice(0, 64 - 40) + 'c24ddb5dfe6f89fd2e40a661051667328ec09f30'
-        }, 'latest'],
-        id: 1,
-      }),
-    })
-    .then(r => r.json())
-    .then(d => {
-      const hex = d.result;
-      const balanceBigInt = BigInt(hex);
-      const divisor = BigInt('1000000000000000000');
-      const balance = Number(balanceBigInt / divisor);
-      alert('Solde ZND : ' + balance);
-    })
-    .catch(e => alert(e.message));
-  }}>
-  <Text style={{ color: '#fff', fontSize: 18, fontWeight: '700' }}>
-    DEBUG BSC
-  </Text>
-</TouchableOpacity>
 
       <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout}>
         <Text style={styles.logoutBtnText}>🚪 {t('logout')}</Text>
@@ -1979,7 +1974,7 @@ const handleLogin = async () => {
                 alert('Remplis tous les champs');
                 return;
               }
-              if (!privateKey) {
+              if (!(await walletService.hasWallet())) {
                 setShowSendZnd(false);
                 setShowWalletConnect(true);
                 return;
@@ -2516,6 +2511,28 @@ const renderMarket = () => (
       {activeTab === 'market'   && renderMarket()}
       {activeTab === 'jobs' && renderJobs()}
       {activeTab === 'wallet' && renderWallet()}
+      {activeTab === 'valt' && (
+  <VALTDashboard navigation={{
+    navigate: (screen) => {
+      setActiveTab(
+        screen === 'CreatePledge' ? 'createPledge'
+        : screen === 'GenerateQR' ? 'generateQR'
+        : screen === 'ScanQR' ? 'scanQR'
+        : screen === 'WalletScreen' ? 'wallet'
+        : 'valt'
+      );
+    }
+  }} />
+)}
+{activeTab === 'createPledge' && (
+  <CreatePledgeScreen navigation={{ navigate: setActiveTab, goBack: () => setActiveTab('valt') }} />
+)}
+{activeTab === 'generateQR' && (
+  <GenerateQRScreen navigation={{ navigate: setActiveTab, goBack: () => setActiveTab('valt') }} />
+)}
+{activeTab === 'scanQR' && (
+  <ScanQRScreen navigation={{ navigate: setActiveTab, goBack: () => setActiveTab('valt') }} />
+)}
 
 
 <View style={styles.navbar}>
@@ -2528,6 +2545,7 @@ const renderMarket = () => (
 { id: 'market',   emoji: '🏪', label: 'Market'        },
 { id: 'jobs',   emoji: '💼', label: 'Jobs'   },
 { id: 'wallet', emoji: '💳', label: 'Wallet' },
+{ id: 'valt', emoji: '🏦', label: 'VALT' },
   ].map(tab => (
     <TouchableOpacity key={tab.id}
       style={[styles.navItem, activeTab === tab.id && styles.navItemActive]}
@@ -2899,12 +2917,12 @@ const renderMarket = () => (
           </View>
         </View>
       </Modal>
-      {/* MODAL WALLET CONNECT */}
+      {/* MODAL IMPORT WALLET */}
 <Modal visible={showWalletConnect} animationType="slide" transparent>
   <View style={styles.modalOverlay}>
     <View style={styles.modalContent}>
       <View style={styles.tabHeader}>
-        <Text style={styles.tabTitle}>🔐 Connecter Wallet</Text>
+        <Text style={styles.tabTitle}>🔐 Importer un wallet</Text>
         <TouchableOpacity onPress={() => setShowWalletConnect(false)}>
           <Text style={styles.searchClose}>✕</Text>
         </TouchableOpacity>
@@ -2912,29 +2930,40 @@ const renderMarket = () => (
       <View style={styles.walletInfoBox}>
         <Text style={styles.walletInfoText}>⚠️ Sécurité importante</Text>
         <Text style={styles.walletInfoSub}>
-          Ta clé privée reste uniquement sur ton téléphone.
+          Ta clé privée / phrase mnémonique reste uniquement sur ton téléphone (stockage sécurisé).
           Elle n'est jamais envoyée sur nos serveurs.
         </Text>
       </View>
       <View style={styles.inputBlock}>
-        <Text style={styles.inputLabel}>🔑 Clé privée BSC</Text>
+        <Text style={styles.inputLabel}>🔑 Clé privée (0x...) ou phrase mnémonique</Text>
         <TextInput
           style={styles.input}
-          placeholder="0x..."
+          placeholder="0x... ou mot1 mot2 mot3 ..."
           placeholderTextColor="#6b7280"
           secureTextEntry
-          value={privateKey}
-          onChangeText={v => setPrivateKey(v)}
+          value={importInput}
+          onChangeText={v => setImportInput(v)}
         />
       </View>
       <TouchableOpacity
         style={styles.btnPrimary}
-        onPress={() => {
-          if (!privateKey.trim()) return;
-          setShowWalletConnect(false);
-          addNotification('Wallet connecte pour transactions !', 'znd');
+        onPress={async () => {
+          const value = importInput.trim();
+          if (!value) return;
+          try {
+            const isPrivateKey = value.startsWith('0x') && value.length === 66;
+            const result = isPrivateKey
+              ? await walletService.importFromPrivateKey(value)
+              : await walletService.importWallet(value);
+            setAuthUser(prev => ({ ...prev, walletAddress: result.address }));
+            setShowWalletConnect(false);
+            setImportInput('');
+            addNotification('Wallet importé avec succès !', 'znd');
+          } catch (err) {
+            alert('Import échoué : ' + err.message);
+          }
         }}>
-        <Text style={styles.btnPrimaryText}>🔗 Connecter pour envoyer ZND</Text>
+        <Text style={styles.btnPrimaryText}>🔗 Importer ce wallet</Text>
       </TouchableOpacity>
       <TouchableOpacity
         style={[styles.btnSecondary, { marginTop: 8 }]}
@@ -3382,6 +3411,10 @@ myLiveWidget:     { position: 'absolute', bottom: 100, left: 80,
                     gap: 8, backgroundColor: 'rgba(239,68,68,0.15)',
                     borderRadius: 16, padding: 12, borderWidth: 1,
                     borderColor: '#ef4444' },
+                    territoryMarker: { alignItems: 'center', backgroundColor: 'rgba(13,8,32,0.9)',
+                   borderRadius: 12, padding: 6, borderWidth: 1,
+                   borderColor: 'rgba(167,139,250,0.4)' },
+territoryZnd:    { fontSize: 9, color: '#C9A84C', fontWeight: '700', marginTop: 2 },
   typeBtn:           { alignItems: 'center', marginRight: 12,
                        backgroundColor: 'rgba(255,255,255,0.03)',
                        borderRadius: 12, padding: 12, borderWidth: 1,
