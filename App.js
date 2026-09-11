@@ -50,19 +50,19 @@ const translations = {
   fr: {
     live: 'EN DIRECT', nearYou: 'Près de toi', events: 'Events',
     treasures: 'Trésors', createEvent: '+ Créer', joinEarn: 'Rejoindre — Gagner',
-    hello: 'Dire bonjour', add: 'Ajouter', all: '🌍 Tout',
+    add: 'Ajouter', all: '🌍 Tout',
     sport: 'Sport', social: 'Social', music: 'Musique', food: 'Food',
     treasure: 'Trésor ZND', job: 'Job', participants: 'participants',
     zndToday: 'ZND/auj.', search: 'Rechercher activités, jobs, annonces...',
     profile: 'Profil', messages: 'Messages', groups: 'Groupes',
     shop: 'Acheter', map: 'Carte', sendMessage: 'Envoyer un message',
     createGroup: 'Créer un groupe', buyZnd: 'Acheter ZND',
-    friends: 'Amis', activities: 'Activités', score: 'Score',
-    join: 'Rejoindre', send: 'Envoyer', pay: 'Payer en ZND',
+    friends: 'Amis', activities: 'Activités',
+    join: 'Rejoindre', send: 'Envoyer',
     newGroup: 'Nouveau groupe', groupName: 'Nom du groupe',
-    searchResults: 'Résultats', noResults: 'Aucun résultat',
+    noResults: 'Aucun résultat',
     wallet: 'Portefeuille', balance: 'Solde',
-    welcome: 'Bienvenue sur', tagline: 'Rencontre, explore & gagne des ZND',
+    tagline: 'Rencontre, explore & gagne des ZND',
     login: 'Se connecter', register: 'Créer un compte',
     name: 'Ton prénom', email: 'Email', password: 'Mot de passe',
     confirmPwd: 'Confirmer le mot de passe',
@@ -78,19 +78,19 @@ const translations = {
   en: {
     live: 'LIVE', nearYou: 'Near you', events: 'Events',
     treasures: 'Treasures', createEvent: '+ Create', joinEarn: 'Join — Earn',
-    hello: 'Say hello', add: 'Add friend', all: '🌍 All',
+    add: 'Add friend', all: '🌍 All',
     sport: 'Sport', social: 'Social', music: 'Music', food: 'Food',
     treasure: 'ZND Treasure', job: 'Job', participants: 'participants',
     zndToday: 'ZND/today', search: 'Search activities, jobs, ads...',
     profile: 'Profile', messages: 'Messages', groups: 'Groups',
     shop: 'Shop', map: 'Map', sendMessage: 'Send a message',
     createGroup: 'Create group', buyZnd: 'Buy ZND',
-    friends: 'Friends', activities: 'Activities', score: 'Score',
-    join: 'Join', send: 'Send', pay: 'Pay in ZND',
+    friends: 'Friends', activities: 'Activities',
+    join: 'Join', send: 'Send',
     newGroup: 'New group', groupName: 'Group name',
-    searchResults: 'Results', noResults: 'No results',
+    noResults: 'No results',
     wallet: 'Wallet', balance: 'Balance',
-    welcome: 'Welcome to', tagline: 'Meet, explore & earn ZND',
+    tagline: 'Meet, explore & earn ZND',
     login: 'Log in', register: 'Create account',
     name: 'Your first name', email: 'Email', password: 'Password',
     confirmPwd: 'Confirm password',
@@ -103,50 +103,50 @@ const translations = {
     joinNow: 'Join Pulse', logout: 'Log out',
     forgotPassword: 'Forgot password?',
   },
-  es: {
-    live: 'EN VIVO', nearYou: 'Cerca de ti', events: 'Eventos',
-    treasures: 'Tesoros', createEvent: '+ Crear', joinEarn: 'Unirse — Ganar',
-    hello: 'Decir hola', add: 'Añadir', all: '🌍 Todo',
-    sport: 'Deporte', social: 'Social', music: 'Música', food: 'Comida',
-    treasure: 'Tesoro ZND', job: 'Trabajo', participants: 'participantes',
-    zndToday: 'ZND/hoy', search: 'Buscar actividades, trabajos...',
-    profile: 'Perfil', messages: 'Mensajes', groups: 'Grupos',
-    shop: 'Tienda', map: 'Mapa', sendMessage: 'Enviar mensaje',
-    createGroup: 'Crear grupo', buyZnd: 'Comprar ZND',
-    friends: 'Amigos', activities: 'Actividades', score: 'Puntuación',
-    join: 'Unirse', send: 'Enviar', pay: 'Pagar en ZND',
-    newGroup: 'Nuevo grupo', groupName: 'Nombre del grupo',
-    searchResults: 'Resultados', noResults: 'Sin resultados',
-    wallet: 'Cartera', balance: 'Saldo',
-    welcome: 'Bienvenido a', tagline: 'Conoce, explora y gana ZND',
-    login: 'Iniciar sesión', register: 'Crear cuenta',
-    name: 'Tu nombre', email: 'Correo electrónico', password: 'Contraseña',
-    confirmPwd: 'Confirmar contraseña',
-    haveAccount: '¿Ya tienes cuenta?', noAccount: '¿No tienes cuenta?',
-    orWith: 'O continuar con', terms: 'Al continuar, aceptas nuestros Términos',
-    nameError: 'Nombre requerido', emailError: 'Email inválido',
-    passwordError: 'Mínimo 6 caracteres',
-    confirmError: 'Las contraseñas no coinciden',
-    walletCreated: '✅ ¡Wallet ZND creada automáticamente!',
-    joinNow: 'Unirse a Pulse', logout: 'Cerrar sesión',
-    forgotPassword: '¿Olvidaste tu contraseña?',
+  it: {
+    live: 'IN DIRETTA', nearYou: 'Vicino a te', events: 'Eventi',
+    treasures: 'Tesori', createEvent: '+ Crea', joinEarn: 'Unisciti — Guadagna',
+    add: 'Aggiungi', all: '🌍 Tutto',
+    sport: 'Sport', social: 'Sociale', music: 'Musica', food: 'Cibo',
+    treasure: 'Tesoro ZND', job: 'Lavoro', participants: 'partecipanti',
+    zndToday: 'ZND/oggi', search: 'Cerca attività, lavori, annunci...',
+    profile: 'Profilo', messages: 'Messaggi', groups: 'Gruppi',
+    shop: 'Compra', map: 'Mappa', sendMessage: 'Invia un messaggio',
+    createGroup: 'Crea gruppo', buyZnd: 'Compra ZND',
+    friends: 'Amici', activities: 'Attività',
+    join: 'Unisciti', send: 'Invia',
+    newGroup: 'Nuovo gruppo', groupName: 'Nome del gruppo',
+    noResults: 'Nessun risultato',
+    wallet: 'Portafoglio', balance: 'Saldo',
+    tagline: 'Incontra, esplora e guadagna ZND',
+    login: 'Accedi', register: 'Crea un account',
+    name: 'Il tuo nome', email: 'Email', password: 'Password',
+    confirmPwd: 'Conferma password',
+    haveAccount: 'Hai già un account?', noAccount: 'Non hai ancora un account?',
+    orWith: 'Oppure continua con', terms: 'Continuando, accetti i nostri Termini',
+    nameError: 'Nome richiesto', emailError: 'Email non valida',
+    passwordError: 'Minimo 6 caratteri',
+    confirmError: 'Le password non corrispondono',
+    walletCreated: '✅ Wallet ZND creato automaticamente!',
+    joinNow: 'Unisciti a Pulse', logout: 'Esci',
+    forgotPassword: 'Password dimenticata?',
   },
   hi: {
     live: 'लाइव', nearYou: 'पास में', events: 'इवेंट',
     treasures: 'खजाने', createEvent: '+ बनाएं', joinEarn: 'जुड़ें — कमाएं',
-    hello: 'नमस्ते', add: 'जोड़ें', all: '🌍 सभी',
+    add: 'जोड़ें', all: '🌍 सभी',
     sport: 'खेल', social: 'सामाजिक', music: 'संगीत', food: 'खाना',
     treasure: 'ZND खजाना', job: 'नौकरी', participants: 'प्रतिभागी',
     zndToday: 'ZND/आज', search: 'गतिविधियां, नौकरी खोजें...',
     profile: 'प्रोफ़ाइल', messages: 'संदेश', groups: 'समूह',
     shop: 'खरीदें', map: 'नक्शा', sendMessage: 'संदेश भेजें',
     createGroup: 'समूह बनाएं', buyZnd: 'ZND खरीदें',
-    friends: 'दोस्त', activities: 'गतिविधियां', score: 'स्कोर',
-    join: 'जुड़ें', send: 'भेजें', pay: 'ZND से भुगतान',
+    friends: 'दोस्त', activities: 'गतिविधियां',
+    join: 'जुड़ें', send: 'भेजें',
     newGroup: 'नया समूह', groupName: 'समूह का नाम',
-    searchResults: 'परिणाम', noResults: 'कोई परिणाम नहीं',
+    noResults: 'कोई परिणाम नहीं',
     wallet: 'वॉलेट', balance: 'शेष',
-    welcome: 'स्वागत है', tagline: 'मिलें, खोजें और ZND कमाएं',
+    tagline: 'मिलें, खोजें और ZND कमाएं',
     login: 'लॉग इन करें', register: 'खाता बनाएं',
     name: 'आपका नाम', email: 'ईमेल', password: 'पासवर्ड',
     confirmPwd: 'पासवर्ड की पुष्टि करें',
@@ -163,19 +163,19 @@ const translations = {
   ru: {
     live: 'ПРЯМОЙ ЭФИР', nearYou: 'Рядом с тобой', events: 'События',
     treasures: 'Клады', createEvent: '+ Создать', joinEarn: 'Присоединиться — Заработать',
-    hello: 'Привет', add: 'Добавить', all: '🌍 Все',
+    add: 'Добавить', all: '🌍 Все',
     sport: 'Спорт', social: 'Общение', music: 'Музыка', food: 'Еда',
     treasure: 'Клад ZND', job: 'Работа', participants: 'участников',
     zndToday: 'ZND/сег.', search: 'Поиск активностей, работы, объявлений...',
     profile: 'Профиль', messages: 'Сообщения', groups: 'Группы',
     shop: 'Магазин', map: 'Карта', sendMessage: 'Отправить сообщение',
     createGroup: 'Создать группу', buyZnd: 'Купить ZND',
-    friends: 'Друзья', activities: 'Активности', score: 'Очки',
-    join: 'Присоединиться', send: 'Отправить', pay: 'Оплатить ZND',
+    friends: 'Друзья', activities: 'Активности',
+    join: 'Присоединиться', send: 'Отправить',
     newGroup: 'Новая группа', groupName: 'Название группы',
-    searchResults: 'Результаты', noResults: 'Ничего не найдено',
+    noResults: 'Ничего не найдено',
     wallet: 'Кошелёк', balance: 'Баланс',
-    welcome: 'Добро пожаловать в', tagline: 'Знакомься, исследуй и зарабатывай ZND',
+    tagline: 'Знакомься, исследуй и зарабатывай ZND',
     login: 'Войти', register: 'Создать аккаунт',
     name: 'Твоё имя', email: 'Email', password: 'Пароль',
     confirmPwd: 'Подтвердить пароль',
@@ -320,7 +320,7 @@ export default function App() {
   const [isTracking, setIsTracking] = useState(false);
   const earnInterval                = useRef(null);
   const trackingStartedAt           = useRef(null);
-  const liveStartedAt               = useRef(null);
+  const liveSessionId               = useRef(null);
   const [treasures, setTreasures]   = useState([
     { id: 1, lat: 48.860, lng: 2.352, znd: 200, found: false, emoji: '💎' },
     { id: 2, lat: 19.078, lng: 72.879, znd: 500, found: false, emoji: '🏆' },
@@ -601,8 +601,31 @@ const handleLogin = async () => {
   }
 };
 
-  const handleLogout = () => {
-    AsyncStorage.removeItem(AUTH_TOKEN_KEY);
+  // Termine le live en cours proprement : arrête l'intervalle, retire le marqueur de la carte
+  // (bug #B), et crédite le vrai temps écoulé côté serveur (bug #C). Partagée entre le bouton
+  // "Terminer" et la déconnexion (bug #A), pour ne jamais laisser un live tourner en arrière-plan.
+  const endLive = async () => {
+    if (!myLive) return;
+    clearInterval(liveInterval.current);
+    const endedLiveId = myLive.id;
+    setMyLive(null);
+    setLives(prev => prev.filter(l => l.id !== endedLiveId));
+    setLiveViewers(0);
+    setLiveZnd(0);
+    if (liveSessionId.current) {
+      const sessionId = liveSessionId.current;
+      liveSessionId.current = null;
+      const data = await callEconomy('/economy/live/end', { sessionId });
+      if (data.success && data.earned > 0) {
+        setAuthUser(prev => ({ ...prev, znd: data.znd }));
+        addNotification('Live termine ! +' + data.earned + ' ZND gagnes !', 'znd');
+      }
+    }
+  };
+
+  const handleLogout = async () => {
+    await endLive();
+    await AsyncStorage.removeItem(AUTH_TOKEN_KEY);
     setAuthUser(null);
     setForm({ name: '', email: '', password: '', confirmPassword: '' });
     setErrors({});
@@ -900,12 +923,12 @@ const handleLogin = async () => {
         <Text style={styles.terms}>{t('terms')}</Text>
       </View>
       <View style={styles.previewLangRow}>
-        {['fr','en','es','hi','ru'].map(l => (
+        {['fr','en','it','hi','ru'].map(l => (
           <TouchableOpacity key={l}
             style={[styles.langBtn, lang === l && styles.langBtnActive]}
             onPress={() => setLang(l)}>
             <Text style={styles.langText}>
-              {l==='fr'?'🇫🇷':l==='en'?'🇬🇧':l==='es'?'🇪🇸':l==='hi'?'🇮🇳':'🇷🇺'}
+              {l==='fr'?'🇫🇷':l==='en'?'🇬🇧':l==='it'?'🇮🇹':l==='hi'?'🇮🇳':'🇷🇺'}
             </Text>
           </TouchableOpacity>
         ))}
@@ -919,12 +942,12 @@ const handleLogin = async () => {
       {renderMapView()}
       <View style={styles.welcomeOverlay}>
         <View style={styles.langRow}>
-          {['fr','en','es','hi','ru'].map(l => (
+          {['fr','en','it','hi','ru'].map(l => (
             <TouchableOpacity key={l}
               style={[styles.langBtn, lang === l && styles.langBtnActive]}
               onPress={() => setLang(l)}>
               <Text style={styles.langText}>
-                {l==='fr'?'🇫🇷':l==='en'?'🇬🇧':l==='es'?'🇪🇸':l==='hi'?'🇮🇳':'🇷🇺'}
+                {l==='fr'?'🇫🇷':l==='en'?'🇬🇧':l==='it'?'🇮🇹':l==='hi'?'🇮🇳':'🇷🇺'}
               </Text>
             </TouchableOpacity>
           ))}
@@ -1119,12 +1142,12 @@ const handleLogin = async () => {
         </View>
         <View style={styles.headerRight}>
           <View style={styles.langSelector}>
-            {['fr','en','es','hi','ru'].map(l => (
+            {['fr','en','it','hi','ru'].map(l => (
               <TouchableOpacity key={l}
                 style={[styles.langBtn, lang === l && styles.langBtnActive]}
                 onPress={() => setLang(l)}>
                 <Text style={styles.langText}>
-                  {l==='fr'?'🇫🇷':l==='en'?'🇬🇧':l==='es'?'🇪🇸':l==='hi'?'🇮🇳':'🇷🇺'}
+                  {l==='fr'?'🇫🇷':l==='en'?'🇬🇧':l==='it'?'🇮🇹':l==='hi'?'🇮🇳':'🇷🇺'}
                 </Text>
               </TouchableOpacity>
             ))}
@@ -1617,8 +1640,14 @@ const handleLogin = async () => {
 
       <TouchableOpacity
         style={styles.btnPrimary}
-        onPress={() => {
+        onPress={async () => {
           if (!newLive.title.trim()) return;
+          const startData = await callEconomy('/economy/live/start');
+          if (!startData.success) {
+            alert(startData.error || "Impossible de démarrer le live");
+            return;
+          }
+          liveSessionId.current = startData.sessionId;
           const pos = userLocation || { latitude: 48.856, longitude: 2.352 };
           const live = {
             id: Date.now(),
@@ -1634,10 +1663,11 @@ const handleLogin = async () => {
           setLives(prev => [...prev, live]);
           setMyLive(live);
           setShowStartLive(false);
-          liveStartedAt.current = Date.now();
+          setNewLive({ title: '', emoji: '🎥' });
           addNotification('Live lance ! Tu es en direct !', 'live');
 
-          // Simule des viewers qui arrivent
+          // Simule des viewers qui arrivent (l'affichage seulement - le vrai gain ZND est
+          // calculé côté serveur à partir du temps réellement écoulé, cf. /economy/live/end)
           liveInterval.current = setInterval(() => {
             setLiveViewers(v => v + Math.floor(Math.random() * 3));
             setLiveZnd(z => z + Math.floor(Math.random() * 10));
@@ -1662,24 +1692,7 @@ const handleLogin = async () => {
     <TouchableOpacity
       style={{ backgroundColor: '#ef4444', borderRadius: 8,
         paddingHorizontal: 12, paddingVertical: 6 }}
-      onPress={() => {
-        setMyLive(null);
-        clearInterval(liveInterval.current);
-        const elapsedSeconds = liveStartedAt.current
-          ? Math.floor((Date.now() - liveStartedAt.current) / 1000)
-          : 0;
-        liveStartedAt.current = null;
-        if (elapsedSeconds > 0) {
-          callEconomy('/economy/earn/live', { elapsedSeconds }).then(data => {
-            if (data.success && data.earned > 0) {
-              setAuthUser(prev => ({ ...prev, znd: data.znd }));
-              addNotification('Live termine ! +' + data.earned + ' ZND gagnes !', 'znd');
-            }
-          });
-        }
-        setLiveViewers(0);
-        setLiveZnd(0);
-      }}>
+      onPress={endLive}>
       <Text style={{ color: '#fff', fontWeight: '700', fontSize: 12 }}>
         Terminer
       </Text>
