@@ -36,12 +36,12 @@ const COLORS = {
   reputation: '#FFEAA7'
 };
 
+// DATA et REPUTATION retirés : pas de backend de valorisation/vérification réel pour ces types
+// (cf. CreatePledgeScreen.jsx) - les proposer ici mènerait à un dead-end silencieux.
 const COL_CONFIG = {
   PHYSICAL: { icon: 'cube', color: COLORS.physical, label: 'Bien physique' },
   SKILL: { icon: 'school', color: COLORS.skill, label: 'Compétences' },
-  SUBSCRIPTION: { icon: 'card-membership', color: COLORS.subscription, label: 'Abonnement' },
-  DATA: { icon: 'analytics', color: COLORS.data, label: 'Données' },
-  REPUTATION: { icon: 'star', color: COLORS.reputation, label: 'Réputation' }
+  SUBSCRIPTION: { icon: 'card-membership', color: COLORS.subscription, label: 'Abonnement' }
 };
 
 // ─────────────────────────────────────────────

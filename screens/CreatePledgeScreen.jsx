@@ -12,7 +12,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { Camera } from 'expo-camera';
-import { pledgeService } from '../services/valtService';
+import { pledgeService, API_BASE, getAuthHeaders } from '../services/valtService';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const COLORS = {
@@ -47,15 +47,8 @@ const COLLATERAL_TYPES = [
     label: 'Abonnement',
     desc: 'Netflix, Adobe, Spotify...',
     fields: ['provider', 'oauthConnect']
-  },
-  {
-    type: 'REPUTATION',
-    icon: 'star',
-    color: COLORS.reputation,
-    label: 'Réputation',
-    desc: 'Score GitHub, Airbnb, Upwork...',
-    fields: ['githubToken', 'airbnbProfile']
   }
+  // Type REPUTATION retiré : pas de backend de vérification GitHub/Airbnb réel pour l'instant.
 ];
 
 const CONDITIONS = [
@@ -377,16 +370,18 @@ export default function CreatePledgeScreen({ navigation, route }) {
     if (!form.model && selectedType === 'PHYSICAL') {
       return Alert.alert('Modèle requis', 'Entre le modèle de ton bien');
     }
+    if (!form.provider && selectedType === 'SUBSCRIPTION') {
+      return Alert.alert('Abonnement requis', 'Choisis ton abonnement');
+    }
 
     setLoading(true);
     try {
       let valuationData;
-      const baseUrl = 'https://valt-backend.onrender.com';
 
       if (selectedType === 'PHYSICAL') {
-        const res = await fetch(`${baseUrl}/api/valuate/physical`, {
+        const res = await fetch(`${API_BASE}/api/valuate/physical`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', ...(await getAuthHeaders()) },
           body: JSON.stringify({ model: form.model, condition: form.condition, serialNumber: form.serialNumber })
         });
         const data = await res.json();
@@ -398,6 +393,21 @@ export default function CreatePledgeScreen({ navigation, route }) {
           netCredit: Math.round(form.hourlyRate * form.hours * 0.70 * 0.965),
           fee: Math.round(form.hourlyRate * form.hours * 0.70 * 0.025),
           insurance: Math.round(form.hourlyRate * form.hours * 0.70 * 0.01),
+          confidence: 'medium'
+        };
+      } else if (selectedType === 'SUBSCRIPTION') {
+        const res = await fetch(`${API_BASE}/api/valuate/subscription`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...(await getAuthHeaders()) },
+          body: JSON.stringify({ provider: form.provider })
+        });
+        const data = await res.json();
+        const monthlyValue = data.valuation?.monthlyValue ?? 0;
+        valuationData = {
+          marketValue: monthlyValue,
+          netCredit: Math.round(monthlyValue * 0.70 * 0.965),
+          fee: Math.round(monthlyValue * 0.70 * 0.025),
+          insurance: Math.round(monthlyValue * 0.70 * 0.01),
           confidence: 'medium'
         };
       }
@@ -434,6 +444,12 @@ const userAddress = await AsyncStorage.getItem('valt_address')
           profileUrl: form.profileUrl,
           durationDays: form.durationDays || 7
         });
+      } else if (selectedType === 'SUBSCRIPTION') {
+        result = await pledgeService.createSubscriptionPledge({
+          provider: form.provider,
+          oauthToken: form.oauthToken,
+          durationDays: form.durationDays || 30
+        });
       }
 
       if (result?.success) {
@@ -442,6 +458,8 @@ const userAddress = await AsyncStorage.getItem('valt_address')
           `Tu as reçu ${valuation?.netCredit} ZND\nTx: ${result.txHash?.substring(0, 20)}...`,
           [{ text: 'Voir mon gage', onPress: () => navigation.navigate('valt') }]
         );
+      } else {
+        Alert.alert('Erreur', result?.error || 'La création du gage a échoué, réessaie.');
       }
     } catch (err) {
       Alert.alert('Erreur', 'Création du gage échouée: ' + err.message);

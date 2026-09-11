@@ -10,6 +10,26 @@ import VALTDashboard from './screens/VALTDashboard';
 import CreatePledgeScreen from './screens/CreatePledgeScreen';
 import { GenerateQRScreen, ScanQRScreen } from './screens/QRScreen';
 import { walletService } from './services/valtService';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
+const AUTH_TOKEN_KEY = 'pulse_auth_token';
+const getAuthHeaders = async () => {
+  const token = await AsyncStorage.getItem(AUTH_TOKEN_KEY);
+  return token ? { Authorization: `Bearer ${token}` } : {};
+};
+// Persiste l'adresse wallet VALT côté serveur (users.wallet_address) une fois résolue,
+// pour qu'elle survienne à une reconnexion sur un autre appareil.
+const persistWalletAddress = async (walletAddress) => {
+  try {
+    await fetch(`${API_URL}/users/wallet`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...(await getAuthHeaders()) },
+      body: JSON.stringify({ walletAddress }),
+    });
+  } catch (err) {
+    console.log('[persistWalletAddress] échec :', err.message);
+  }
+};
 
 const translations = {
   fr: {
@@ -468,62 +488,104 @@ const [newProduct, setNewProduct]       = useState({
   };
 
 const handleRegister = async () => {
-  if (validate(false)) {
+  console.log('[handleRegister] validate() avec form =', JSON.stringify(form));
+  if (!validate(false)) {
+    console.log('[handleRegister] validation échouée, errors =', JSON.stringify(errors));
+    return;
+  }
+  const url = `${API_URL}/register`;
+  const payload = {
+    name: form.name,
+    email: form.email.trim().toLowerCase(),
+    password: form.password,
+    birthdate: form.birthdate,
+    country: form.country,
+    city: form.city,
+  };
+  console.log('[handleRegister] POST', url, JSON.stringify(payload));
+  try {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    console.log('[handleRegister] response status =', response.status, response.ok);
+    const rawText = await response.text();
+    console.log('[handleRegister] response body brut =', rawText);
+    let data;
     try {
-      const response = await fetch(`${API_URL}/register`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: form.name,
-          email: form.email,
-          password: form.password,
-          birthdate: form.birthdate,
-          country: form.country,
-          city: form.city,
-        }),
-      });
-      const data = await response.json();
-      if (data.success) {
-        const walletAddress = data.user.walletAddress || await walletService.getAddress();
-        setAuthUser({ ...data.user, walletAddress, interests: ['sport', 'social'] });
-        generateMatches(['sport', 'social']);
-        setScreen('app');
-      } else {
-        alert(data.error);
-      }
-    } catch (err) {
-      alert('Erreur connexion serveur');
+      data = JSON.parse(rawText);
+    } catch (parseErr) {
+      console.log('[handleRegister] échec JSON.parse :', parseErr.message);
+      alert('Réponse serveur invalide (voir logs)');
+      return;
     }
+    if (data.success) {
+      console.log('[handleRegister] succès, user =', JSON.stringify(data.user));
+      if (data.token) await AsyncStorage.setItem(AUTH_TOKEN_KEY, data.token);
+      const walletAddress = data.user.walletAddress || await walletService.getAddress();
+      console.log('[handleRegister] walletAddress résolu =', walletAddress);
+      if (!data.user.walletAddress) persistWalletAddress(walletAddress);
+      setAuthUser({ ...data.user, walletAddress, interests: ['sport', 'social'] });
+      generateMatches(['sport', 'social']);
+      setScreen('app');
+    } else {
+      console.log('[handleRegister] échec côté serveur, data.error =', data.error);
+      alert(data.error);
+    }
+  } catch (err) {
+    console.log('[handleRegister] exception :', err.name, err.message, err.stack);
+    alert('Erreur connexion serveur : ' + err.message);
   }
 };
 
 const handleLogin = async () => {
-  if (validate(true)) {
+  console.log('[handleLogin] validate() avec form =', JSON.stringify(form));
+  if (!validate(true)) {
+    console.log('[handleLogin] validation échouée, errors =', JSON.stringify(errors));
+    return;
+  }
+  const url = `${API_URL}/login`;
+  const payload = { email: form.email.trim().toLowerCase(), password: form.password };
+  console.log('[handleLogin] POST', url, JSON.stringify(payload));
+  try {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    console.log('[handleLogin] response status =', response.status, response.ok);
+    const rawText = await response.text();
+    console.log('[handleLogin] response body brut =', rawText);
+    let data;
     try {
-      const response = await fetch(`${API_URL}/login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          email: form.email,
-          password: form.password,
-        }),
-      });
-      const data = await response.json();
-      if (data.success) {
-        const walletAddress = data.user.walletAddress || await walletService.getAddress();
-        setAuthUser({ ...data.user, walletAddress, interests: ['sport', 'job'] });
-        generateMatches(['sport', 'job']);
-        setScreen('app');
-      } else {
-        alert(data.error);
-      }
-    } catch (err) {
-      alert('Erreur connexion serveur');
+      data = JSON.parse(rawText);
+    } catch (parseErr) {
+      console.log('[handleLogin] échec JSON.parse :', parseErr.message);
+      alert('Réponse serveur invalide (voir logs)');
+      return;
     }
+    if (data.success) {
+      console.log('[handleLogin] succès, user =', JSON.stringify(data.user));
+      if (data.token) await AsyncStorage.setItem(AUTH_TOKEN_KEY, data.token);
+      const walletAddress = data.user.walletAddress || await walletService.getAddress();
+      console.log('[handleLogin] walletAddress résolu =', walletAddress);
+      if (!data.user.walletAddress) persistWalletAddress(walletAddress);
+      setAuthUser({ ...data.user, walletAddress, interests: ['sport', 'job'] });
+      generateMatches(['sport', 'job']);
+      setScreen('app');
+    } else {
+      console.log('[handleLogin] échec côté serveur, data.error =', data.error);
+      alert(data.error);
+    }
+  } catch (err) {
+    console.log('[handleLogin] exception :', err.name, err.message, err.stack);
+    alert('Erreur connexion serveur : ' + err.message);
   }
 };
 
   const handleLogout = () => {
+    AsyncStorage.removeItem(AUTH_TOKEN_KEY);
     setAuthUser(null);
     setForm({ name: '', email: '', password: '', confirmPassword: '' });
     setErrors({});
@@ -1257,7 +1319,7 @@ const handleLogin = async () => {
     try {
       const response = await fetch(API_URL + '/events', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...(await getAuthHeaders()) },
         body: JSON.stringify({
           type: newEvent.type,
           title: newEvent.title,
@@ -2350,7 +2412,7 @@ const renderMarket = () => (
               try {
                 const response = await fetch(API_URL + '/shops', {
                   method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
+                  headers: { 'Content-Type': 'application/json', ...(await getAuthHeaders()) },
                   body: JSON.stringify({
                     userId: authUser?.id,
                     name: newShop.name,
@@ -2437,7 +2499,7 @@ const renderMarket = () => (
               try {
                 const response = await fetch(API_URL + '/products', {
                   method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
+                  headers: { 'Content-Type': 'application/json', ...(await getAuthHeaders()) },
                   body: JSON.stringify({
                     shopId: myShop?.id,
                     name: newProduct.name,
@@ -2889,7 +2951,7 @@ const renderMarket = () => (
     try {
       const response = await fetch(API_URL + '/messages', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...(await getAuthHeaders()) },
         body: JSON.stringify({
           from: authUser?.id,
           to: chatUser?.id,

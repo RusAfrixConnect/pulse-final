@@ -7,7 +7,12 @@ import { ethers } from 'ethers';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SecureStore from 'expo-secure-store';
 
-const API_BASE = 'https://pulse-backend-9zpb.onrender.com';
+export const API_BASE = 'https://pulse-backend-9zpb.onrender.com';
+const AUTH_TOKEN_KEY = 'pulse_auth_token';
+export const getAuthHeaders = async () => {
+  const token = await AsyncStorage.getItem(AUTH_TOKEN_KEY);
+  return token ? { Authorization: `Bearer ${token}` } : {};
+};
 const BSC_RPC = 'https://bsc-dataseed.binance.org/';
 const ZND_CONTRACT = '0x3BcE58FC2C2BB0653dC757Ba0bc5328d4f2f15A9';
 const ZND_ABI = [
@@ -133,7 +138,7 @@ export const pledgeService = {
     // 1. Valorisation
     const valuationRes = await fetch(`${API_BASE}/api/valuate/physical`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...(await getAuthHeaders()) },
       body: JSON.stringify({ model, condition, serialNumber })
     });
     const valuation = await valuationRes.json();
@@ -152,6 +157,7 @@ export const pledgeService = {
 
       const verifyRes = await fetch(`${API_BASE}/api/verify/video`, {
         method: 'POST',
+        headers: await getAuthHeaders(),
         body: formData
       });
       verificationResult = await verifyRes.json();
@@ -163,7 +169,7 @@ export const pledgeService = {
     // 3. Création on-chain
     const pledgeRes = await fetch(`${API_BASE}/api/pledge/create`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...(await getAuthHeaders()) },
       body: JSON.stringify({
         borrowerAddress: address,
         collateralType: 'PHYSICAL',
@@ -199,14 +205,14 @@ export const pledgeService = {
 
     const valuationRes = await fetch(`${API_BASE}/api/valuate/skill`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...(await getAuthHeaders()) },
       body: JSON.stringify({ skillType, hourlyRate, hours, profileUrl })
     });
     const valuation = await valuationRes.json();
 
     const pledgeRes = await fetch(`${API_BASE}/api/pledge/create`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...(await getAuthHeaders()) },
       body: JSON.stringify({
         borrowerAddress: address,
         collateralType: 'SKILL',
@@ -228,14 +234,14 @@ export const pledgeService = {
 
     const valuationRes = await fetch(`${API_BASE}/api/valuate/subscription`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...(await getAuthHeaders()) },
       body: JSON.stringify({ provider, oauthToken })
     });
     const valuation = await valuationRes.json();
 
     const pledgeRes = await fetch(`${API_BASE}/api/pledge/create`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...(await getAuthHeaders()) },
       body: JSON.stringify({
         borrowerAddress: address,
         collateralType: 'SUBSCRIPTION',
@@ -251,7 +257,9 @@ export const pledgeService = {
 
   async getUserPledges() {
     const address = await walletService.getAddress();
-    const res = await fetch(`${API_BASE}/api/user/${address}/pledges`);
+    const res = await fetch(`${API_BASE}/api/user/${address}/pledges`, {
+      headers: await getAuthHeaders()
+    });
     const remote = await res.json();
 
     // Le serveur est la source de vérité ; le cache local ne comble que ce qu'il n'a pas encore.
@@ -264,14 +272,16 @@ export const pledgeService = {
   },
 
   async getPledgeDetails(pledgeId) {
-    const res = await fetch(`${API_BASE}/api/pledge/${pledgeId}`);
+    const res = await fetch(`${API_BASE}/api/pledge/${pledgeId}`, {
+      headers: await getAuthHeaders()
+    });
     return res.json();
   },
 
   async repayPledge(pledgeId) {
     const res = await fetch(`${API_BASE}/api/pledge/repay`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...(await getAuthHeaders()) },
       body: JSON.stringify({ pledgeId })
     });
     return res.json();
@@ -303,7 +313,7 @@ export const qrService = {
 
     const res = await fetch(`${API_BASE}/api/qr/generate`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...(await getAuthHeaders()) },
       body: JSON.stringify({
         pledgeId,
         borrowerAddress: address,
@@ -326,7 +336,7 @@ export const qrService = {
 
     const res = await fetch(`${API_BASE}/api/qr/pay`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...(await getAuthHeaders()) },
       body: JSON.stringify({ qrPayload, recipientAddress })
     });
 
@@ -342,7 +352,7 @@ export const qrService = {
   async transferZND(toAddress, amount) {
     const res = await fetch(`${API_BASE}/api/transfer/znd`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...(await getAuthHeaders()) },
       body: JSON.stringify({
         from: await walletService.getAddress(),
         to: toAddress,
@@ -361,7 +371,9 @@ export const reputationService = {
 
   async getScore() {
     const address = await walletService.getAddress();
-    const res = await fetch(`${API_BASE}/api/user/${address}/pledges`);
+    const res = await fetch(`${API_BASE}/api/user/${address}/pledges`, {
+      headers: await getAuthHeaders()
+    });
     const data = await res.json();
     return data.reputation;
   },
@@ -370,7 +382,7 @@ export const reputationService = {
     const address = await walletService.getAddress();
     const res = await fetch(`${API_BASE}/api/reputation/aggregate`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...(await getAuthHeaders()) },
       body: JSON.stringify({ userAddress: address, githubToken })
     });
     return res.json();
