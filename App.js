@@ -30,6 +30,21 @@ const persistWalletAddress = async (walletAddress) => {
     console.log('[persistWalletAddress] échec :', err.message);
   }
 };
+// Appelle les routes /economy/* server-authoritative (bug #13) : le serveur calcule/valide
+// les montants ZND, le client ne fait plus confiance à son propre state pour créditer/débiter.
+const callEconomy = async (path, body) => {
+  try {
+    const res = await fetch(`${API_URL}${path}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...(await getAuthHeaders()) },
+      body: JSON.stringify(body || {}),
+    });
+    return await res.json();
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
+};
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 const translations = {
   fr: {
@@ -304,6 +319,8 @@ export default function App() {
   const [zndEarned, setZndEarned]   = useState(0);
   const [isTracking, setIsTracking] = useState(false);
   const earnInterval                = useRef(null);
+  const trackingStartedAt           = useRef(null);
+  const liveStartedAt               = useRef(null);
   const [treasures, setTreasures]   = useState([
     { id: 1, lat: 48.860, lng: 2.352, znd: 200, found: false, emoji: '💎' },
     { id: 2, lat: 19.078, lng: 72.879, znd: 500, found: false, emoji: '🏆' },
@@ -479,7 +496,7 @@ const [newProduct, setNewProduct]       = useState({
   const validate = (isLogin) => {
     const e = {};
     if (!isLogin && !form.name.trim()) e.name = t('nameError');
-    if (!form.email.includes('@'))     e.email = t('emailError');
+    if (!EMAIL_REGEX.test(form.email.trim())) e.email = t('emailError');
     if (form.password.length < 6)     e.password = t('passwordError');
     if (!isLogin && form.password !== form.confirmPassword)
       e.confirmPassword = t('confirmError');
@@ -637,6 +654,7 @@ const handleLogin = async () => {
   const toggleTracking = () => {
     if (!isTracking) {
       setIsTracking(true);
+      trackingStartedAt.current = Date.now();
       earnInterval.current = setInterval(() => {
         setSteps(s => {
           const newSteps = s + Math.floor(Math.random() * 15 + 5);
@@ -647,22 +665,34 @@ const handleLogin = async () => {
     } else {
       setIsTracking(false);
       clearInterval(earnInterval.current);
-      if (zndEarned > 0) {
-        // Crédit optimiste local uniquement : pas de mint/transfer on-chain.
-        // Écrasé par le prochain sync walletService.getZNDBalance() (ex: reconnexion).
-        setAuthUser(prev => ({ ...prev, znd: (prev?.znd || 0) + zndEarned }));
-        addNotification(`🏃 +${zndEarned} ZND gagnés en marchant !`, 'znd');
-        setZndEarned(0);
-        setSteps(0);
+      const elapsedSeconds = trackingStartedAt.current
+        ? Math.floor((Date.now() - trackingStartedAt.current) / 1000)
+        : 0;
+      trackingStartedAt.current = null;
+      if (elapsedSeconds > 0) {
+        callEconomy('/economy/earn/walk', { elapsedSeconds }).then(data => {
+          if (data.success && data.earned > 0) {
+            setAuthUser(prev => ({ ...prev, znd: data.znd }));
+            addNotification(`🏃 +${data.earned} ZND gagnés en marchant !`, 'znd');
+          }
+        });
       }
+      setZndEarned(0);
+      setSteps(0);
     }
   };
 
   const collectTreasure = (treasure) => {
-    setTreasures(prev => prev.map(tr => tr.id === treasure.id ? { ...tr, found: true } : tr));
-    setAuthUser(prev => ({ ...prev, znd: (prev?.znd || 0) + treasure.znd })); // optimiste local, non on-chain
-    addNotification(`💎 +${treasure.znd} ZND collectés !`, 'znd');
     setTreasureFound(null);
+    callEconomy('/economy/earn/treasure', { treasureId: treasure.id }).then(data => {
+      if (data.success) {
+        setTreasures(prev => prev.map(tr => tr.id === treasure.id ? { ...tr, found: true } : tr));
+        setAuthUser(prev => ({ ...prev, znd: data.znd }));
+        addNotification(`💎 +${data.earned} ZND collectés !`, 'znd');
+      } else {
+        alert(data.error || 'Trésor déjà collecté');
+      }
+    });
   };
 
   const addNotification = (text, type) => {
@@ -1517,9 +1547,18 @@ const handleLogin = async () => {
             style={[styles.btnPrimary, { flex: 1, marginBottom: 0,
               backgroundColor: 'rgba(201,168,76,0.2)',
               borderWidth: 1, borderColor: '#C9A84C' }]}
-            onPress={() => {
+            onPress={async () => {
+              if ((authUser?.znd || 0) < amount) {
+                alert('Solde ZND insuffisant');
+                return;
+              }
+              const data = await callEconomy('/economy/spend', { reason: 'live_tip', amount });
+              if (!data.success) {
+                alert(data.error || 'Solde ZND insuffisant');
+                return;
+              }
+              setAuthUser(prev => ({ ...prev, znd: data.znd }));
               addNotification('Envoye ' + amount + ' ZND au live !', 'znd');
-              setAuthUser(prev => ({ ...prev, znd: (prev?.znd || 0) - amount })); // optimiste local, non on-chain
             }}>
             <Text style={{ color: '#C9A84C', fontWeight: '700' }}>
               💎 {amount} ZND
@@ -1595,6 +1634,7 @@ const handleLogin = async () => {
           setLives(prev => [...prev, live]);
           setMyLive(live);
           setShowStartLive(false);
+          liveStartedAt.current = Date.now();
           addNotification('Live lance ! Tu es en direct !', 'live');
 
           // Simule des viewers qui arrivent
@@ -1625,8 +1665,18 @@ const handleLogin = async () => {
       onPress={() => {
         setMyLive(null);
         clearInterval(liveInterval.current);
-        setAuthUser(prev => ({ ...prev, znd: (prev?.znd || 0) + liveZnd })); // optimiste local, non on-chain
-        addNotification('Live termine ! +' + liveZnd + ' ZND gagnes !', 'znd');
+        const elapsedSeconds = liveStartedAt.current
+          ? Math.floor((Date.now() - liveStartedAt.current) / 1000)
+          : 0;
+        liveStartedAt.current = null;
+        if (elapsedSeconds > 0) {
+          callEconomy('/economy/earn/live', { elapsedSeconds }).then(data => {
+            if (data.success && data.earned > 0) {
+              setAuthUser(prev => ({ ...prev, znd: data.znd }));
+              addNotification('Live termine ! +' + data.earned + ' ZND gagnes !', 'znd');
+            }
+          });
+        }
         setLiveViewers(0);
         setLiveZnd(0);
       }}>
@@ -1673,13 +1723,17 @@ const handleLogin = async () => {
           {!myTerritories.find(t => t.id === showTerritory.id) ? (
             <TouchableOpacity
               style={styles.btnPrimary}
-              onPress={() => {
-                const cost = 100;
-                if ((authUser?.znd || 0) < cost) {
+              onPress={async () => {
+                if ((authUser?.znd || 0) < 100) {
                   alert('Il te faut 100 ZND pour capturer ce territoire !');
                   return;
                 }
-                setAuthUser(prev => ({ ...prev, znd: (prev?.znd || 0) - cost })); // optimiste local, non on-chain
+                const data = await callEconomy('/economy/spend', { reason: 'territory_capture' });
+                if (!data.success) {
+                  alert(data.error || 'Solde ZND insuffisant');
+                  return;
+                }
+                setAuthUser(prev => ({ ...prev, znd: data.znd }));
                 setMyTerritories(prev => [...prev, showTerritory]);
                 setTerritories(prev => prev.map(t =>
                   t.id === showTerritory.id

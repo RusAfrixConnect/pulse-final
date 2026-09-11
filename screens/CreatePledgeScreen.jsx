@@ -13,7 +13,6 @@ import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { Camera } from 'expo-camera';
 import { pledgeService, API_BASE, getAuthHeaders } from '../services/valtService';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const COLORS = {
   bg: '#0A0A0F', card: '#12121A', cardBorder: '#1E1E2E',
@@ -366,9 +365,18 @@ export default function CreatePledgeScreen({ navigation, route }) {
     }
   };
 
+  const VALUATION_ENDPOINT = {
+    PHYSICAL: { path: '/api/valuate/physical', body: () => ({ model: form.model, condition: form.condition, serialNumber: form.serialNumber }) },
+    SKILL: { path: '/api/valuate/skill', body: () => ({ hourlyRate: form.hourlyRate, hours: form.hours, profileUrl: form.profileUrl }) },
+    SUBSCRIPTION: { path: '/api/valuate/subscription', body: () => ({ provider: form.provider }) },
+  };
+
   const handleEstimate = async () => {
     if (!form.model && selectedType === 'PHYSICAL') {
       return Alert.alert('Modèle requis', 'Entre le modèle de ton bien');
+    }
+    if ((!form.hourlyRate || !form.hours) && selectedType === 'SKILL') {
+      return Alert.alert('Champs requis', 'Renseigne ton taux horaire et le nombre d\'heures');
     }
     if (!form.provider && selectedType === 'SUBSCRIPTION') {
       return Alert.alert('Abonnement requis', 'Choisis ton abonnement');
@@ -376,43 +384,18 @@ export default function CreatePledgeScreen({ navigation, route }) {
 
     setLoading(true);
     try {
-      let valuationData;
+      // Toute la logique de valorisation (LTV, frais, assurance) vit côté serveur -
+      // source unique de vérité, cf. audit bug #18.
+      const endpoint = VALUATION_ENDPOINT[selectedType];
+      const res = await fetch(`${API_BASE}${endpoint.path}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...(await getAuthHeaders()) },
+        body: JSON.stringify(endpoint.body())
+      });
+      const data = await res.json();
+      if (!data.success) throw new Error(data.error || 'Erreur de valorisation');
 
-      if (selectedType === 'PHYSICAL') {
-        const res = await fetch(`${API_BASE}/api/valuate/physical`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', ...(await getAuthHeaders()) },
-          body: JSON.stringify({ model: form.model, condition: form.condition, serialNumber: form.serialNumber })
-        });
-        const data = await res.json();
-        console.log('Valuation response:', JSON.stringify(data));
-        valuationData = data.valuation || data;
-      } else if (selectedType === 'SKILL') {
-        valuationData = {
-          marketValue: form.hourlyRate * form.hours,
-          netCredit: Math.round(form.hourlyRate * form.hours * 0.70 * 0.965),
-          fee: Math.round(form.hourlyRate * form.hours * 0.70 * 0.025),
-          insurance: Math.round(form.hourlyRate * form.hours * 0.70 * 0.01),
-          confidence: 'medium'
-        };
-      } else if (selectedType === 'SUBSCRIPTION') {
-        const res = await fetch(`${API_BASE}/api/valuate/subscription`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', ...(await getAuthHeaders()) },
-          body: JSON.stringify({ provider: form.provider })
-        });
-        const data = await res.json();
-        const monthlyValue = data.valuation?.monthlyValue ?? 0;
-        valuationData = {
-          marketValue: monthlyValue,
-          netCredit: Math.round(monthlyValue * 0.70 * 0.965),
-          fee: Math.round(monthlyValue * 0.70 * 0.025),
-          insurance: Math.round(monthlyValue * 0.70 * 0.01),
-          confidence: 'medium'
-        };
-      }
-
-      setValuation(valuationData);
+      setValuation(data.valuation);
       nextStep();
     } catch (err) {
       Alert.alert('Erreur', "Impossible d'estimer la valeur: " + err.message);
@@ -426,9 +409,6 @@ export default function CreatePledgeScreen({ navigation, route }) {
     try {
       let result;
       if (selectedType === 'PHYSICAL') {
-        // Utiliser l'adresse wallet Pulse existante
-const userAddress = await AsyncStorage.getItem('valt_address') 
-  || '0xC24dDB5dFe6F89fd2e40A661051667328EC09F30';
         result = await pledgeService.createPhysicalPledge({
           model: form.model,
           condition: form.condition,
