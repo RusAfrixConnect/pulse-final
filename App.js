@@ -355,6 +355,7 @@ export default function App() {
  const [showEditProfile, setShowEditProfile] = useState(false);
  const [savingProfile, setSavingProfile]     = useState(false);
  const [showNotifs, setShowNotifs] = useState(false);
+ const [showMoreMenu, setShowMoreMenu] = useState(false);
  // STORIES
 const [stories, setStories]               = useState([
   { id: 1, user: 'Alex', avatar: '👨', text: 'Au parc ! 🌳', emoji: '🌳',
@@ -494,6 +495,23 @@ const [newProduct, setNewProduct]       = useState({
   const unreadCount = notifications.filter(n => !n.read).length;
   const cardAnim = useRef(new Animated.Value(0)).current;
   const t = (key) => translations[lang][key] || key;
+
+  // Onglets principaux (largeur confortable) + onglets secondaires regroupés
+  // dans le menu "Plus" (bug #2 : 9 icônes tassées sur une seule ligne).
+  const PRIMARY_TABS = [
+    { id: 'map',      emoji: '🗺️', label: t('map')      },
+    { id: 'messages', emoji: '💬', label: t('messages')  },
+    { id: 'groups',   emoji: '👥', label: t('groups')    },
+    { id: 'profile',  emoji: '👤', label: t('profile')   },
+  ];
+  const MORE_TABS = [
+    { id: 'shop',   emoji: '🛍️', label: t('shop') },
+    { id: 'market', emoji: '🏪', label: 'Market' },
+    { id: 'jobs',   emoji: '💼', label: 'Jobs' },
+    { id: 'wallet', emoji: '💳', label: 'Wallet' },
+    { id: 'valt',   emoji: '🏦', label: 'VALT' },
+  ];
+  const isMoreTabActive = MORE_TABS.some(tab => tab.id === activeTab);
 
   // Lire solde ZND réel
   useEffect(() => {
@@ -2755,18 +2773,11 @@ const renderMarket = () => (
 )}
 
 
+{/* 4 onglets principaux + "Plus" pour ne pas tasser 9 icônes sur une seule ligne
+    (bug #2) : chaque onglet a maintenant une largeur confortable, et les fonctions
+    secondaires (shop/market/jobs/wallet/valt/notifs) vivent dans le menu Plus. */}
 <View style={styles.navbar}>
-  {[
-    { id: 'map',      emoji: '🗺️', label: t('map')      },
-    { id: 'messages', emoji: '💬', label: t('messages')  },
-    { id: 'groups',   emoji: '👥', label: t('groups')    },
-    { id: 'shop',     emoji: '🛍️', label: t('shop')      },
-    { id: 'profile',  emoji: '👤', label: t('profile')   },
-{ id: 'market',   emoji: '🏪', label: 'Market'        },
-{ id: 'jobs',   emoji: '💼', label: 'Jobs'   },
-{ id: 'wallet', emoji: '💳', label: 'Wallet' },
-{ id: 'valt', emoji: '🏦', label: 'VALT' },
-  ].map(tab => (
+  {PRIMARY_TABS.map(tab => (
     <TouchableOpacity key={tab.id}
       style={[styles.navItem, activeTab === tab.id && styles.navItemActive]}
       onPress={() => setActiveTab(tab.id)}>
@@ -2776,21 +2787,56 @@ const renderMarket = () => (
       </Text>
     </TouchableOpacity>
   ))}
-  {/* CLOCHE NOTIFICATIONS */}
+  {/* BOUTON PLUS */}
   <TouchableOpacity
-    style={[styles.navItem, { position: 'relative' }]}
-    onPress={() => setShowNotifs(true)}>
+    style={[styles.navItem, isMoreTabActive && styles.navItemActive]}
+    onPress={() => setShowMoreMenu(true)}>
     <View>
-      <Text style={styles.navEmoji}>🔔</Text>
+      <Text style={styles.navEmoji}>⋯</Text>
       {unreadCount > 0 && (
         <View style={styles.notifBadge}>
           <Text style={styles.notifBadgeText}>{unreadCount}</Text>
         </View>
       )}
     </View>
-    <Text style={styles.navLabel}>Notifs</Text>
+    <Text style={[styles.navLabel, isMoreTabActive && styles.navLabelActive]}>Plus</Text>
   </TouchableOpacity>
 </View>
+
+{/* MODAL PLUS */}
+<Modal visible={showMoreMenu} animationType="slide" transparent>
+  <View style={styles.modalOverlay}>
+    <View style={[styles.modalContent, { maxHeight: '70%' }]}>
+      <View style={styles.tabHeader}>
+        <Text style={styles.tabTitle}>Plus</Text>
+        <TouchableOpacity onPress={() => setShowMoreMenu(false)}>
+          <Text style={styles.searchClose}>✕</Text>
+        </TouchableOpacity>
+      </View>
+      <View style={styles.moreGrid}>
+        {MORE_TABS.map(tab => (
+          <TouchableOpacity key={tab.id} style={styles.moreItem}
+            onPress={() => { setActiveTab(tab.id); setShowMoreMenu(false); }}>
+            <Text style={styles.moreItemEmoji}>{tab.emoji}</Text>
+            <Text style={styles.moreItemLabel}>{tab.label}</Text>
+          </TouchableOpacity>
+        ))}
+        <TouchableOpacity style={styles.moreItem}
+          onPress={() => { setShowMoreMenu(false); setShowNotifs(true); }}>
+          <View>
+            <Text style={styles.moreItemEmoji}>🔔</Text>
+            {unreadCount > 0 && (
+              <View style={styles.moreItemBadge}>
+                <Text style={styles.notifBadgeText}>{unreadCount}</Text>
+              </View>
+            )}
+          </View>
+          <Text style={styles.moreItemLabel}>Notifs</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
+  </View>
+</Modal>
 
       {/* MODAL NOTIFICATIONS */}
       <Modal visible={showNotifs} animationType="slide" transparent>
@@ -3376,6 +3422,15 @@ const styles = StyleSheet.create({
   navEmoji:          { fontSize: 20 },
   navLabel:          { fontSize: 9, color: '#6b7280', textTransform: 'uppercase', letterSpacing: 0.5 },
   navLabelActive:    { color: '#a78bfa' },
+  moreGrid:          { flexDirection: 'row', flexWrap: 'wrap', gap: 16,
+                       paddingVertical: 8, paddingBottom: 24 },
+  moreItem:          { width: '28%', alignItems: 'center', gap: 6, paddingVertical: 18,
+                       backgroundColor: 'rgba(255,255,255,0.05)', borderRadius: 16 },
+  moreItemEmoji:     { fontSize: 28 },
+  moreItemLabel:     { fontSize: 12, color: '#e8e0f0', fontWeight: '600' },
+  moreItemBadge:     { position: 'absolute', top: -4, right: -10,
+                       backgroundColor: '#ef4444', borderRadius: 8,
+                       minWidth: 16, height: 16, alignItems: 'center', justifyContent: 'center' },
   tabContent:        { flex: 1, backgroundColor: '#080510', padding: 16,
                        paddingTop: Platform.OS === 'ios' ? 60 : 44 },
   tabTitle:          { fontSize: 22, fontWeight: '800', color: '#a78bfa', marginBottom: 16 },
