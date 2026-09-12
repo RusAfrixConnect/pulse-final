@@ -4,7 +4,7 @@ import {
   Animated, Platform, StatusBar, ScrollView,
   TextInput, Modal, FlatList, KeyboardAvoidingView
 } from 'react-native';
-import MapView, { Marker, Circle } from 'react-native-maps';
+import MapView, { Marker, Circle, PROVIDER_GOOGLE } from 'react-native-maps';
 import { Linking } from 'react-native';
 import VALTDashboard from './screens/VALTDashboard';
 import CreatePledgeScreen from './screens/CreatePledgeScreen';
@@ -802,6 +802,7 @@ const handleLogin = async () => {
 
   const renderMapView = () => (
     <MapView
+      provider={PROVIDER_GOOGLE}
       style={StyleSheet.absoluteFillObject}
       region={mapRegion}
       onRegionChangeComplete={setMapRegion}
