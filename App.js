@@ -11,6 +11,8 @@ import CreatePledgeScreen from './screens/CreatePledgeScreen';
 import { GenerateQRScreen, ScanQRScreen } from './screens/QRScreen';
 import MatchingScreen from './screens/MatchingScreen';
 import EditProfileScreen from './screens/EditProfileScreen';
+import BookingScreen from './screens/BookingScreen';
+import MyBusinessScreen from './screens/MyBusinessScreen';
 import { LOOKING_FOR_MAP, INTEREST_MAP, computeCompatibility } from './constants/matching';
 import { walletService } from './services/valtService';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -400,6 +402,13 @@ const [friendRelations, setFriendRelations]   = useState([]); // GET /friends/st
 const [conversations, setConversations]       = useState([]);
 const [matchCandidates, setMatchCandidates]   = useState([]);
 const [loadingMatchCandidates, setLoadingMatchCandidates] = useState(false);
+// RÉSERVATIONS (commerces à rendez-vous : restaurants, coiffeurs, médecins...)
+const [businesses, setBusinesses]             = useState([]);
+const [showBookingFor, setShowBookingFor]     = useState(null); // business affiché dans BookingScreen
+const [showMyBusiness, setShowMyBusiness]     = useState(false);
+const [myBusinesses, setMyBusinesses]         = useState([]);
+const [showMyBookings, setShowMyBookings]     = useState(false);
+const [myBookings, setMyBookings]             = useState([]);
 // CERCLES D'AMIS
 const [friendsLocations, setFriendsLocations] = useState([
   { id: 1, name: 'Alex', avatar: '👨', lat: 48.857, lng: 2.351, activity: 'Running 🏃', online: true },
@@ -932,6 +941,7 @@ const handleLogin = async () => {
     loadFriendRequests();
     loadFriendStatus();
     loadConversations();
+    loadBusinesses();
   };
 
   // Statut de relation avec un utilisateur donné, dérivé de GET /friends/status (un seul
@@ -971,6 +981,86 @@ const handleLogin = async () => {
     const { ok, data } = await apiFetch(`/friends/${relationId}`, { method: 'DELETE' });
     if (ok && data.success) {
       loadFriends(); loadFriendRequests(); loadFriendStatus();
+    } else {
+      alert(data.error || 'Erreur');
+    }
+  };
+
+  // ── RÉSERVATIONS (commerces : restaurants, coiffeurs, médecins...) ──
+  const loadBusinesses = async () => {
+    const { ok, data } = await apiFetch('/businesses');
+    if (ok && Array.isArray(data)) setBusinesses(data);
+  };
+
+  const loadMyBusinesses = async () => {
+    const { ok, data } = await apiFetch('/businesses/mine');
+    if (ok && Array.isArray(data)) setMyBusinesses(data);
+  };
+
+  const createBusiness = async (business) => {
+    const { ok, data } = await apiFetch('/businesses', {
+      method: 'POST', body: JSON.stringify(business),
+    });
+    if (ok && data.success) {
+      addNotification(`${business.name} a été créé ! 🏪`, 'social');
+      loadMyBusinesses();
+      loadBusinesses();
+    } else {
+      alert(data.error || 'Erreur lors de la création du commerce');
+    }
+    return ok && data.success;
+  };
+
+  // Pas d'état global pour les créneaux/réservations : chaque écran (BookingScreen,
+  // MyBusinessScreen) charge et affiche les siens, ces fonctions renvoient juste les données.
+  const loadBusinessSlots = async (businessId) => {
+    const { ok, data } = await apiFetch(`/businesses/${businessId}/slots`);
+    return ok && Array.isArray(data) ? data : [];
+  };
+
+  const loadBusinessBookings = async (businessId) => {
+    const { ok, data } = await apiFetch(`/businesses/${businessId}/bookings`);
+    return ok && Array.isArray(data) ? data : [];
+  };
+
+  const createSlot = async (businessId, slot) => {
+    const { ok, data } = await apiFetch(`/businesses/${businessId}/slots`, {
+      method: 'POST', body: JSON.stringify(slot),
+    });
+    if (!ok || !data.success) alert(data.error || 'Erreur lors de la création du créneau');
+    return ok && data.success;
+  };
+
+  const deleteSlot = async (businessId, slotId) => {
+    const { ok, data } = await apiFetch(`/businesses/${businessId}/slots/${slotId}`, { method: 'DELETE' });
+    if (!ok || !data.success) alert(data.error || 'Erreur lors de la suppression du créneau');
+    return ok && data.success;
+  };
+
+  // Réserve un créneau et notifie la confirmation - pas de notification push réelle
+  // configurée dans l'app (ni expo-notifications, ni token enregistré côté serveur) :
+  // c'est le même mécanisme de notification locale que pour un message ou un gain ZND.
+  const bookSlot = async (slotId, paymentMethod) => {
+    const { ok, data } = await apiFetch(`/slots/${slotId}/book`, {
+      method: 'POST', body: JSON.stringify({ paymentMethod }),
+    });
+    if (ok && data.success) {
+      if (data.znd !== undefined) setAuthUser(prev => ({ ...prev, znd: data.znd }));
+      addNotification(`Réservation confirmée chez ${data.businessName} ✅`, 'booking');
+    }
+    return { ok: ok && data.success, error: data.error };
+  };
+
+  const loadMyBookings = async () => {
+    const { ok, data } = await apiFetch('/bookings/mine');
+    if (ok && Array.isArray(data)) setMyBookings(data);
+  };
+
+  const cancelBooking = async (bookingId) => {
+    const { ok, data } = await apiFetch(`/bookings/${bookingId}/cancel`, { method: 'POST' });
+    if (ok && data.success) {
+      addNotification('Réservation annulée', 'booking');
+      loadMyBookings();
     } else {
       alert(data.error || 'Erreur');
     }
@@ -1131,6 +1221,19 @@ const handleLogin = async () => {
             <View style={styles.businessBadge}>
               <Text style={styles.businessBadgeText}>-{b.zndDiscount}%</Text>
             </View>
+          </View>
+        </Marker>
+      ))}
+      {/* COMMERCES AVEC RÉSERVATION (vrais, GET /businesses) - marqueur 📅 dédié pour les
+          distinguer des MOCK_BUSINESSES ci-dessus (tableau de bord marketing fictif,
+          fonctionnalité séparée non touchée ici). */}
+      {businesses.map(b => (
+        <Marker key={`booking-biz-${b.id}`}
+          coordinate={{ latitude: b.lat, longitude: b.lng }}
+          anchor={{ x: 0.5, y: 0.5 }}
+          onPress={() => screen === 'app' ? setShowBookingFor(b) : null}>
+          <View style={styles.bookingMarker}>
+            <Text style={styles.bookingMarkerEmoji}>{b.emoji || '📅'}</Text>
           </View>
         </Marker>
       ))}
@@ -3014,6 +3117,16 @@ const renderMarket = () => (
           </View>
           <Text style={styles.moreItemLabel}>Notifs</Text>
         </TouchableOpacity>
+        <TouchableOpacity style={styles.moreItem}
+          onPress={() => { setShowMoreMenu(false); setShowMyBookings(true); loadMyBookings(); }}>
+          <Text style={styles.moreItemEmoji}>📅</Text>
+          <Text style={styles.moreItemLabel}>Réservations</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.moreItem}
+          onPress={() => { setShowMoreMenu(false); setShowMyBusiness(true); loadMyBusinesses(); }}>
+          <Text style={styles.moreItemEmoji}>🏪</Text>
+          <Text style={styles.moreItemLabel}>Mon commerce</Text>
+        </TouchableOpacity>
       </View>
     </View>
   </View>
@@ -3072,6 +3185,64 @@ const renderMarket = () => (
         onSave={saveProfile}
         saving={savingProfile}
       />
+
+      {/* MODAL RÉSERVATION (commerce tapé sur la carte, marqueur 📅) */}
+      <BookingScreen
+        business={showBookingFor}
+        onClose={() => setShowBookingFor(null)}
+        onLoadSlots={loadBusinessSlots}
+        onBook={bookSlot}
+      />
+
+      {/* MODAL MON COMMERCE (créer/gérer créneaux/voir réservations reçues) */}
+      <MyBusinessScreen
+        visible={showMyBusiness}
+        onClose={() => setShowMyBusiness(false)}
+        myBusinesses={myBusinesses}
+        userLocation={userLocation}
+        onCreateBusiness={createBusiness}
+        onLoadSlots={loadBusinessSlots}
+        onCreateSlot={createSlot}
+        onDeleteSlot={deleteSlot}
+        onLoadBookings={loadBusinessBookings}
+      />
+
+      {/* MODAL MES RÉSERVATIONS (en tant que client) */}
+      <Modal visible={showMyBookings} animationType="slide" transparent>
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { maxHeight: '80%' }]}>
+            <View style={styles.tabHeader}>
+              <Text style={styles.tabTitle}>📅 Mes réservations</Text>
+              <TouchableOpacity onPress={() => setShowMyBookings(false)}>
+                <Text style={styles.searchClose}>✕</Text>
+              </TouchableOpacity>
+            </View>
+            <FlatList data={myBookings} keyExtractor={item => item.id.toString()}
+              ListEmptyComponent={<Text style={styles.noResults}>Aucune réservation pour l'instant</Text>}
+              renderItem={({ item }) => (
+                <View style={styles.bookingListItem}>
+                  <Text style={{ fontSize: 28 }}>{item.businessEmoji || '📅'}</Text>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.bookingListName}>{item.businessName}</Text>
+                    <Text style={styles.bookingListMeta}>
+                      {new Date(item.startsAt).toLocaleString('fr-FR', {
+                        weekday: 'short', day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit',
+                      })} · {item.paymentMethod === 'znd' ? `💎${item.amount}` : `${item.amount}€ sur place`}
+                    </Text>
+                    {item.status === 'cancelled' && (
+                      <Text style={styles.bookingListCancelled}>Annulée</Text>
+                    )}
+                  </View>
+                  {item.status === 'confirmed' && (
+                    <TouchableOpacity onPress={() => cancelBooking(item.id)}>
+                      <Text style={styles.bookingListCancelBtn}>Annuler</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+              )} />
+          </View>
+        </View>
+      </Modal>
 
       {/* MODAL BUSINESS DASHBOARD */}
       <Modal visible={showBusinessDash} animationType="slide" transparent>
@@ -3500,6 +3671,11 @@ const styles = StyleSheet.create({
                        backgroundColor: '#10b981', borderRadius: 8,
                        paddingHorizontal: 4, paddingVertical: 1 },
   businessBadgeText: { fontSize: 8, color: '#fff', fontWeight: '700' },
+  bookingMarker:     { width: 40, height: 40, borderRadius: 20,
+                       alignItems: 'center', justifyContent: 'center',
+                       backgroundColor: 'rgba(59,130,246,0.9)',
+                       borderWidth: 2, borderColor: '#fff' },
+  bookingMarkerEmoji: { fontSize: 18 },
   header:            { position: 'absolute', top: 0, left: 0, right: 0,
                        flexDirection: 'row', justifyContent: 'space-between',
                        alignItems: 'center', paddingHorizontal: 16,
@@ -3743,6 +3919,14 @@ const styles = StyleSheet.create({
   searchResultTitle: { fontSize: 14, fontWeight: '600', color: '#e8e0f0' },
   searchResultMeta:  { fontSize: 12, color: '#9b8cb0', marginTop: 2 },
   noResults:         { color: '#9b8cb0', textAlign: 'center', marginTop: 32, fontSize: 14 },
+  bookingListItem:   { flexDirection: 'row', alignItems: 'center', gap: 12,
+                       backgroundColor: 'rgba(255,255,255,0.03)', borderRadius: 12,
+                       padding: 14, marginBottom: 8, borderWidth: 1,
+                       borderColor: 'rgba(167,139,250,0.1)' },
+  bookingListName:   { fontSize: 14, fontWeight: '700', color: '#e8e0f0' },
+  bookingListMeta:   { fontSize: 12, color: '#9b8cb0', marginTop: 2, textTransform: 'capitalize' },
+  bookingListCancelled: { fontSize: 11, color: '#ef4444', marginTop: 4, fontWeight: '600' },
+  bookingListCancelBtn: { fontSize: 12, color: '#ef4444', fontWeight: '700' },
   chatHeader:        { flexDirection: 'row', alignItems: 'center', gap: 12,
                        marginBottom: 16, paddingBottom: 16, borderBottomWidth: 1,
                        borderColor: 'rgba(167,139,250,0.15)' },
