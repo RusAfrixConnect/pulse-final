@@ -16,22 +16,18 @@ import { walletService } from './services/valtService';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const AUTH_TOKEN_KEY = 'pulse_auth_token';
-// Le backend ne stocke pas encore la bio (pas de colonne `bio`) : on la garde en local,
-// par utilisateur, pour qu'elle survive aux reconnexions sur le même appareil.
-const BIO_STORAGE_PREFIX = 'pulse_bio_';
 const getAuthHeaders = async () => {
   const token = await AsyncStorage.getItem(AUTH_TOKEN_KEY);
   return token ? { Authorization: `Bearer ${token}` } : {};
 };
 // Complète le user renvoyé par /register ou /login avec les champs de matching
-// (fallback si l'utilisateur n'a encore rien renseigné) et la bio locale.
-const hydrateAuthUser = async (user, walletAddress) => {
+// (fallback si l'utilisateur n'a encore rien renseigné).
+const hydrateAuthUser = (user, walletAddress) => {
   const interests = Array.isArray(user.interests) && user.interests.length
     ? user.interests : ['sport', 'social'];
   const lookingFor = Array.isArray(user.lookingFor) && user.lookingFor.length
     ? user.lookingFor[0] : 'friendship';
-  const bio = (await AsyncStorage.getItem(`${BIO_STORAGE_PREFIX}${user.id}`)) || '';
-  return { ...user, walletAddress, interests, lookingFor, bio };
+  return { ...user, walletAddress, interests, lookingFor, bio: user.bio || '' };
 };
 // Persiste l'adresse wallet VALT côté serveur (users.wallet_address) une fois résolue,
 // pour qu'elle survienne à une reconnexion sur un autre appareil.
@@ -654,20 +650,18 @@ const handleLogin = async () => {
     setScreen('map_preview');
   };
 
-  // Enregistre le profil de matching (âge, intérêts, objectif) côté serveur via
-  // /users/profile, et la bio en local (pas encore de colonne `bio` côté backend).
+  // Enregistre le profil de matching (âge, bio, intérêts, objectif) côté serveur via /users/profile.
   const saveProfile = async ({ age, bio, interests, lookingFor }) => {
     setSavingProfile(true);
     try {
       const response = await fetch(`${API_URL}/users/profile`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...(await getAuthHeaders()) },
-        body: JSON.stringify({ age, interests, lookingFor: [lookingFor], city: authUser?.city }),
+        body: JSON.stringify({ age, bio, interests, lookingFor: [lookingFor], city: authUser?.city }),
       });
       const data = await response.json();
       if (data.success) {
-        setAuthUser(prev => ({ ...prev, ...data.user, lookingFor, bio }));
-        if (authUser?.id) await AsyncStorage.setItem(`${BIO_STORAGE_PREFIX}${authUser.id}`, bio || '');
+        setAuthUser(prev => ({ ...prev, ...data.user, lookingFor }));
         generateMatches(interests);
         addNotification('Profil mis à jour ✅', 'social');
         setShowEditProfile(false);
@@ -1259,29 +1253,29 @@ const handleLogin = async () => {
         <Text style={styles.geoBtnText}>📍</Text>
       </TouchableOpacity>
       <TouchableOpacity style={styles.matchBtn} onPress={() => setShowMatching(true)}>
-      {/* BOUTON STORY */}
-<TouchableOpacity
-  style={styles.storyBtn}
-  onPress={() => setShowCreateStory(true)}>
-  <Text style={styles.storyBtnText}>📸</Text>
-</TouchableOpacity>
-{/* BOUTON LIVE */}
-<TouchableOpacity
-  style={[styles.liveBtn, myLive && styles.liveBtnActive]}
-  onPress={() => myLive ? null : setShowStartLive(true)}>
-  <Text style={styles.storyBtnText}>{myLive ? '🔴' : '🎥'}</Text>
-</TouchableOpacity>
-{/* BOUTON CERCLE D'AMIS */}
-<TouchableOpacity
-  style={[styles.friendsBtn, sharingLocation && styles.friendsBtnActive]}
-  onPress={() => {
-  const newVal = !sharingLocation;
-  setSharingLocation(newVal);
-  addNotification(newVal ? 'Position partagee !' : 'Position masquee', 'social');
-}}>
-  <Text style={styles.storyBtnText}>👥</Text>
-</TouchableOpacity>
         <Text style={styles.matchBtnText}>🤖</Text>
+      </TouchableOpacity>
+      {/* BOUTON STORY */}
+      <TouchableOpacity
+        style={styles.storyBtn}
+        onPress={() => setShowCreateStory(true)}>
+        <Text style={styles.storyBtnText}>📸</Text>
+      </TouchableOpacity>
+      {/* BOUTON LIVE */}
+      <TouchableOpacity
+        style={[styles.liveBtn, myLive && styles.liveBtnActive]}
+        onPress={() => myLive ? null : setShowStartLive(true)}>
+        <Text style={styles.storyBtnText}>{myLive ? '🔴' : '🎥'}</Text>
+      </TouchableOpacity>
+      {/* BOUTON CERCLE D'AMIS */}
+      <TouchableOpacity
+        style={[styles.friendsBtn, sharingLocation && styles.friendsBtnActive]}
+        onPress={() => {
+          const newVal = !sharingLocation;
+          setSharingLocation(newVal);
+          addNotification(newVal ? 'Position partagee !' : 'Position masquee', 'social');
+        }}>
+        <Text style={styles.storyBtnText}>👥</Text>
       </TouchableOpacity>
       <TouchableOpacity style={[styles.earnWidget, isTracking && styles.earnWidgetActive]}
         onPress={toggleTracking}>
