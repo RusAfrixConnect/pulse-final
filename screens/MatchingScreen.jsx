@@ -52,13 +52,17 @@ export default function MatchingScreen({ visible, onClose, currentUser, onOpenCh
   useEffect(() => { setIndex(0); }, [filters, round]);
 
   const resetPosition = () => {
-    Animated.spring(position, { toValue: { x: 0, y: 0 }, friction: 6, useNativeDriver: true }).start();
+    // `position` est aussi piloté en JS par onPanResponderMove (useNativeDriver: false,
+    // requis avec PanResponder) : toute animation sur cette même valeur doit rester en JS,
+    // sinon RN lève "Attempting to run JS driven animation on animated node that has been
+    // moved to 'native'" dès qu'on relâche le geste après un drag.
+    Animated.spring(position, { toValue: { x: 0, y: 0 }, friction: 6, useNativeDriver: false }).start();
   };
 
   const forceSwipe = (direction) => {
     Animated.timing(position, {
       toValue: { x: direction === 'right' ? SCREEN_W * 1.5 : -SCREEN_W * 1.5, y: 0 },
-      duration: 250, useNativeDriver: true,
+      duration: 250, useNativeDriver: false,
     }).start(() => onSwipeComplete(direction));
   };
 
