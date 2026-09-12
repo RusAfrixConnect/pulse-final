@@ -199,6 +199,35 @@ const EVENT_TYPES = {
   job:      { emoji: '💼', color: '#3b82f6', label: 'job'      },
 };
 
+// Doit rester synchronisé avec INTEREST_KEYS / LOOKING_FOR_KEYS côté serveur (server.js) —
+// le serveur filtre déjà toute clé absente de ces listes.
+const INTEREST_OPTIONS = [
+  { key: 'sport', emoji: '⚽', label: 'Sport' },
+  { key: 'music', emoji: '🎵', label: 'Musique' },
+  { key: 'travel', emoji: '✈️', label: 'Voyage' },
+  { key: 'reading', emoji: '📚', label: 'Lecture' },
+  { key: 'cooking', emoji: '🍳', label: 'Cuisine' },
+  { key: 'gaming', emoji: '🎮', label: 'Gaming' },
+  { key: 'art', emoji: '🎨', label: 'Art' },
+  { key: 'nature', emoji: '🌿', label: 'Nature' },
+  { key: 'fitness', emoji: '💪', label: 'Fitness' },
+  { key: 'photography', emoji: '📷', label: 'Photo' },
+  { key: 'dancing', emoji: '💃', label: 'Danse' },
+  { key: 'tech', emoji: '💻', label: 'Tech' },
+  { key: 'animals', emoji: '🐾', label: 'Animaux' },
+  { key: 'fashion', emoji: '👗', label: 'Mode' },
+  { key: 'movies', emoji: '🎬', label: 'Films' },
+  { key: 'party', emoji: '🎉', label: 'Soirées' },
+];
+const INTEREST_MAP = Object.fromEntries(INTEREST_OPTIONS.map(i => [i.key, i]));
+
+const LOOKING_FOR_OPTIONS = [
+  { key: 'friendship', emoji: '🤝', label: 'Amitié' },
+  { key: 'serious', emoji: '❤️', label: 'Relation sérieuse' },
+  { key: 'casual', emoji: '✨', label: 'Rencontre' },
+];
+const LOOKING_FOR_MAP = Object.fromEntries(LOOKING_FOR_OPTIONS.map(l => [l.key, l]));
+
 const MOCK_EVENTS = [
   { id: 1, type: 'sport', title: 'Match de foot',
     description: '5v5 au parc !', city: 'Paris',
@@ -903,6 +932,7 @@ const handleLogin = async () => {
       ))}
     </MapView>
   );
+
 
   const renderMapPreview = () => (
     <View style={styles.container}>

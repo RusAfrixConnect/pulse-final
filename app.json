@@ -14,7 +14,10 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.pulseapp.znd"
+      "bundleIdentifier": "com.pulseapp.znd",
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "Pulse utilise ta position pour t'afficher sur la carte et trouver des événements, trésors et personnes près de toi."
+      }
     },
     "android": {
       "adaptiveIcon": {
