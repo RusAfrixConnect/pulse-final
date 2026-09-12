@@ -318,6 +318,7 @@ export default function App() {
   const [groupName, setGroupName]   = useState('');
   const [chatUser, setChatUser]     = useState(null);
   const [chatMessages, setChatMessages] = useState([]);
+  const [loadingChatHistory, setLoadingChatHistory] = useState(false);
   const [messageText, setMessageText] = useState('');
   const [mapRegion, setMapRegion]   = useState({
     latitude: 20, longitude: 0, latitudeDelta: 80, longitudeDelta: 80,
@@ -502,6 +503,35 @@ const [newProduct, setNewProduct]       = useState({
       });
     }
   }, [authUser?.walletAddress]);
+
+  // Charge l'historique réel des messages à l'ouverture d'une conversation.
+  // Le backend n'expose que "tous les messages de l'utilisateur connecté"
+  // (GET /messages/:userId, userId = soi-même) : on filtre nous-mêmes sur
+  // l'ID du contact ouvert, et on remet en ordre chronologique croissant
+  // (le serveur renvoie du plus récent au plus ancien).
+  useEffect(() => {
+    setChatMessages([]);
+    if (!chatUser?.id || !authUser?.id) return;
+    let cancelled = false;
+    setLoadingChatHistory(true);
+    (async () => {
+      try {
+        const headers = await getAuthHeaders();
+        const response = await fetch(`${API_URL}/messages/${authUser.id}`, { headers });
+        const data = await response.json();
+        if (cancelled || !Array.isArray(data)) return;
+        const withContact = data
+          .filter(m => String(m.from_user) === String(chatUser.id) || String(m.to_user) === String(chatUser.id))
+          .sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+        setChatMessages(withContact);
+      } catch (err) {
+        console.log('[loadChatHistory] échec :', err.message);
+      } finally {
+        if (!cancelled) setLoadingChatHistory(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [chatUser?.id, authUser?.id]);
 
   useEffect(() => {
     return () => { if (earnInterval.current) clearInterval(earnInterval.current); };
@@ -2986,7 +3016,10 @@ const renderMarket = () => (
               </TouchableOpacity>
             </View>
             <ScrollView style={styles.chatMessages}>
-  {chatMessages.length === 0 && (
+  {loadingChatHistory && (
+    <Text style={styles.chatLoadingText}>Chargement de la conversation...</Text>
+  )}
+  {!loadingChatHistory && chatMessages.length === 0 && (
     <View style={styles.chatBubbleOther}>
       <Text style={styles.chatBubbleText}>{chatUser?.text || 'Salut ! 👋'}</Text>
       <TouchableOpacity
@@ -3452,6 +3485,7 @@ const styles = StyleSheet.create({
   chatAvatar:        { fontSize: 32 },
   chatName:          { flex: 1, fontSize: 16, fontWeight: '700', color: '#e8e0f0' },
   chatMessages:      { flex: 1, gap: 12, paddingVertical: 8 },
+  chatLoadingText:   { color: '#9b8cb0', fontSize: 12, textAlign: 'center', marginTop: 20 },
   chatBubbleOther:   { backgroundColor: 'rgba(107,33,168,0.3)', padding: 12,
                        borderRadius: 16, borderBottomLeftRadius: 4,
                        alignSelf: 'flex-start', maxWidth: '80%' },
