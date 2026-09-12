@@ -11,7 +11,7 @@ import CreatePledgeScreen from './screens/CreatePledgeScreen';
 import { GenerateQRScreen, ScanQRScreen } from './screens/QRScreen';
 import MatchingScreen from './screens/MatchingScreen';
 import EditProfileScreen from './screens/EditProfileScreen';
-import { LOOKING_FOR_MAP } from './constants/matching';
+import { LOOKING_FOR_MAP, MATCH_PROFILES, computeCompatibility } from './constants/matching';
 import { walletService } from './services/valtService';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
@@ -589,7 +589,7 @@ const handleRegister = async () => {
       if (!data.user.walletAddress) persistWalletAddress(walletAddress);
       const hydrated = await hydrateAuthUser(data.user, walletAddress);
       setAuthUser(hydrated);
-      generateMatches(hydrated.interests);
+      generateMatches(hydrated);
       setScreen('app');
     } else {
       console.log('[handleRegister] échec côté serveur, data.error =', data.error);
@@ -635,7 +635,7 @@ const handleLogin = async () => {
       if (!data.user.walletAddress) persistWalletAddress(walletAddress);
       const hydrated = await hydrateAuthUser(data.user, walletAddress);
       setAuthUser(hydrated);
-      generateMatches(hydrated.interests);
+      generateMatches(hydrated);
       setScreen('app');
     } else {
       console.log('[handleLogin] échec côté serveur, data.error =', data.error);
@@ -692,7 +692,7 @@ const handleLogin = async () => {
       const data = await response.json();
       if (data.success) {
         setAuthUser(prev => ({ ...prev, ...data.user, lookingFor }));
-        generateMatches(interests);
+        generateMatches({ interests, lookingFor, age });
         addNotification('Profil mis à jour ✅', 'social');
         setShowEditProfile(false);
       } else {
@@ -798,14 +798,18 @@ const handleLogin = async () => {
     setNotifications(prev => prev.map(n => ({ ...n, read: true })));
   };
 
-  const generateMatches = (userInterests) => {
-    const matches = MOCK_USERS
-      .map(user => {
-        const common = user.interests.filter(i => userInterests.includes(i));
-        const score  = Math.round((common.length / userInterests.length) * 100);
-        return { ...user, matchScore: score, commonInterests: common };
+  // Même algorithme (constants/matching.js) que le swipe IA Matching, pour que le score
+  // affiché en aperçu sur l'onglet Profil corresponde exactement à celui du swipe pour
+  // la même personne — auparavant ce ratio simple sur MOCK_USERS pouvait diverger de
+  // computeCompatibility (MatchingScreen.jsx), deux algos différents pour le même score.
+  const generateMatches = ({ interests = [], lookingFor, age } = {}) => {
+    const me = { interests, lookingFor, age };
+    const matches = MATCH_PROFILES
+      .map(profile => {
+        const { score, commonInterests } = computeCompatibility(me, profile);
+        return { ...profile, matchScore: score, commonInterests };
       })
-      .filter(u => u.matchScore > 0)
+      .filter(p => p.matchScore > 0)
       .sort((a, b) => b.matchScore - a.matchScore);
     setMatchSuggestions(matches);
   };
