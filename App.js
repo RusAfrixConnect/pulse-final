@@ -11,7 +11,7 @@ import CreatePledgeScreen from './screens/CreatePledgeScreen';
 import { GenerateQRScreen, ScanQRScreen } from './screens/QRScreen';
 import MatchingScreen from './screens/MatchingScreen';
 import EditProfileScreen from './screens/EditProfileScreen';
-import { LOOKING_FOR_MAP, MATCH_PROFILES, computeCompatibility } from './constants/matching';
+import { LOOKING_FOR_MAP, INTEREST_MAP, computeCompatibility } from './constants/matching';
 import { walletService } from './services/valtService';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
@@ -56,6 +56,49 @@ const callEconomy = async (path, body) => {
     return { success: false, error: err.message };
   }
 };
+// Fetch générique authentifié vers le backend, JSON in/out. Toutes les routes sociales
+// (annuaire, amis, matching, conversations) partagent ce même schéma requête/réponse.
+const apiFetch = async (path, options = {}) => {
+  try {
+    const res = await fetch(`${API_URL}${path}`, {
+      ...options,
+      headers: { 'Content-Type': 'application/json', ...(await getAuthHeaders()), ...(options.headers || {}) },
+    });
+    const data = await res.json();
+    return { ok: res.ok, data };
+  } catch (err) {
+    return { ok: false, data: { error: err.message } };
+  }
+};
+
+// Normalise un profil renvoyé par le backend (annuaire/amis/matching/conversations) vers
+// la forme déjà attendue par l'UI (cartes, matches, modale de profil) : zndScore plutôt
+// que znd, lookingFor en valeur simple plutôt qu'un tableau JSONB, avatar/interests
+// toujours définis même si le profil est incomplet.
+const normalizeUser = (u) => ({
+  id: u.id,
+  name: u.name,
+  avatar: u.avatar || '🙂',
+  bio: u.bio || '',
+  city: u.city || null,
+  age: u.age || null,
+  zndScore: u.znd ?? 0,
+  interests: Array.isArray(u.interests) ? u.interests : [],
+  lookingFor: Array.isArray(u.lookingFor) ? (u.lookingFor[0] || null) : (u.lookingFor || null),
+});
+
+// Heure (HH:MM) si le message date d'aujourd'hui, sinon date courte (JJ/MM) - affiché
+// dans la liste des conversations à partir du vrai timestamp serveur.
+const formatMessageTime = (isoDate) => {
+  if (!isoDate) return '';
+  const date = new Date(isoDate);
+  const now = new Date();
+  const sameDay = date.toDateString() === now.toDateString();
+  return sameDay
+    ? date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    : date.toLocaleDateString([], { day: '2-digit', month: '2-digit' });
+};
+
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 const translations = {
@@ -238,33 +281,11 @@ const MOCK_EVENTS = [
     lat: 55.751, lng: 37.618, participants: 3, maxP: 6, zndReward: 25, distance: '2km' },
 ];
 
-const MOCK_USERS = [
-  { id: 1, name: 'Alex', avatar: '👨', activity: 'Running 🏃', zndScore: 1240,
-    lat: 48.8570, lng: 2.3510, distance: '150m', bio: 'Passionné de sport et crypto 🚀',
-    friends: 124, interests: ['sport', 'music'] },
-  { id: 2, name: 'Sofia', avatar: '👩', activity: 'Yoga 🧘', zndScore: 890,
-    lat: 48.8550, lng: 2.3540, distance: '320m', bio: 'Yoga teacher & ZND holder 💜',
-    friends: 89, interests: ['sport', 'social'] },
-  { id: 3, name: 'Marcus', avatar: '🧑', activity: 'Cherche équipe ⚽', zndScore: 2100,
-    lat: 48.8580, lng: 2.3530, distance: '500m', bio: 'Football & blockchain 🔥',
-    friends: 256, interests: ['sport', 'job'] },
-  { id: 4, name: 'Priya', avatar: '👩', activity: 'Coding 💻', zndScore: 3400,
-    lat: 19.076, lng: 72.877, distance: '1km', bio: 'Dev React Native & crypto fan 🇮🇳',
-    friends: 412, interests: ['job', 'social'] },
-];
-
 const MOCK_GROUPS = [
   { id: 1, name: 'Crypto Paris 🇫🇷', members: 234, emoji: '💎', description: 'Communauté crypto parisienne' },
   { id: 2, name: 'Sport Mumbai 🏏', members: 567, emoji: '⚽', description: 'Sport et activités à Mumbai' },
   { id: 3, name: 'ZND Holders 🚀', members: 1203, emoji: '🌍', description: 'Communauté ZND mondiale' },
   { id: 4, name: 'Jobs Remote 💼', members: 89, emoji: '💼', description: "Offres d'emploi remote payées en ZND" },
-];
-
-const MOCK_MESSAGES = [
-  { id: 1, user: 'Alex', avatar: '👨', text: 'Salut, tu viens au match ce soir ?', time: '14:32', unread: 2 },
-  { id: 2, user: 'Sofia', avatar: '👩', text: "J'ai reçu mes 50 ZND, merci !", time: '13:15', unread: 0 },
-  { id: 3, user: 'Priya', avatar: '👩', text: 'Tu connais un bon dev React Native ?', time: '12:00', unread: 1 },
-  { id: 4, user: 'Marcus', avatar: '🧑', text: 'Le trésor ZND est encore dispo !', time: '11:45', unread: 0 },
 ];
 
 const SHOP_ITEMS = [
@@ -371,6 +392,14 @@ const [newStory, setNewStory]               = useState({ text: '', emoji: '😊'
  const [importInput, setImportInput]             = useState('');
 const [showWalletConnect, setShowWalletConnect] = useState(false);
 const [matchSuggestions, setMatchSuggestions] = useState([]);
+// COUCHE SOCIALE RÉELLE (annuaire, amis, matching, conversations - backend)
+const [directoryUsers, setDirectoryUsers]     = useState([]);
+const [friendsList, setFriendsList]           = useState([]);
+const [friendRequests, setFriendRequests]     = useState([]);
+const [friendRelations, setFriendRelations]   = useState([]); // GET /friends/status brut
+const [conversations, setConversations]       = useState([]);
+const [matchCandidates, setMatchCandidates]   = useState([]);
+const [loadingMatchCandidates, setLoadingMatchCandidates] = useState(false);
 // CERCLES D'AMIS
 const [friendsLocations, setFriendsLocations] = useState([
   { id: 1, name: 'Alex', avatar: '👨', lat: 48.857, lng: 2.351, activity: 'Running 🏃', online: true },
@@ -542,6 +571,13 @@ const [newProduct, setNewProduct]       = useState({
           .filter(m => String(m.from_user) === String(chatUser.id) || String(m.to_user) === String(chatUser.id))
           .sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
         setChatMessages(withContact);
+        // Marque les messages reçus de ce contact comme lus, pour que le badge de
+        // non-lus dans /conversations (onglet Messages) reflète la réalité.
+        if (withContact.some(m => String(m.to_user) === String(authUser.id))) {
+          apiFetch('/messages/read', {
+            method: 'POST', body: JSON.stringify({ otherUserId: chatUser.id }),
+          }).then(() => loadConversations());
+        }
       } catch (err) {
         console.log('[loadChatHistory] échec :', err.message);
       } finally {
@@ -608,6 +644,7 @@ const handleRegister = async () => {
       const hydrated = await hydrateAuthUser(data.user, walletAddress);
       setAuthUser(hydrated);
       generateMatches(hydrated);
+      loadSocialLayer();
       setScreen('app');
     } else {
       console.log('[handleRegister] échec côté serveur, data.error =', data.error);
@@ -654,6 +691,7 @@ const handleLogin = async () => {
       const hydrated = await hydrateAuthUser(data.user, walletAddress);
       setAuthUser(hydrated);
       generateMatches(hydrated);
+      loadSocialLayer();
       setScreen('app');
     } else {
       console.log('[handleLogin] échec côté serveur, data.error =', data.error);
@@ -816,22 +854,127 @@ const handleLogin = async () => {
     setNotifications(prev => prev.map(n => ({ ...n, read: true })));
   };
 
-  // Même algorithme (constants/matching.js) que le swipe IA Matching, pour que le score
-  // affiché en aperçu sur l'onglet Profil corresponde exactement à celui du swipe pour
-  // la même personne — auparavant ce ratio simple sur MOCK_USERS pouvait diverger de
-  // computeCompatibility (MatchingScreen.jsx), deux algos différents pour le même score.
+  // Même algorithme (constants/matching.js) que le swipe IA Matching, appliqué aux
+  // vrais utilisateurs de l'annuaire (GET /users), pour que le score affiché en aperçu
+  // sur l'onglet Profil corresponde exactement à celui du swipe pour la même personne.
   const generateMatches = ({ interests = [], lookingFor, age } = {}) => {
     const me = { interests, lookingFor, age };
-    const matches = MATCH_PROFILES
-      .map(profile => {
-        const { score, commonInterests } = computeCompatibility(me, profile);
-        return { ...profile, matchScore: score, commonInterests };
-      })
-      .filter(p => p.matchScore > 0)
-      .sort((a, b) => b.matchScore - a.matchScore);
-    setMatchSuggestions(matches);
+    apiFetch('/users').then(({ ok, data }) => {
+      if (!ok || !Array.isArray(data)) return;
+      const matches = data
+        .map(normalizeUser)
+        .map(profile => {
+          const { score, commonInterests } = computeCompatibility(me, profile);
+          return { ...profile, matchScore: score, commonInterests };
+        })
+        .filter(p => p.matchScore > 0)
+        .sort((a, b) => b.matchScore - a.matchScore);
+      setMatchSuggestions(matches);
+    });
   };
-  
+
+  // ── COUCHE SOCIALE RÉELLE ──
+  const loadDirectory = async () => {
+    const { ok, data } = await apiFetch('/users');
+    if (ok && Array.isArray(data)) setDirectoryUsers(data.map(normalizeUser));
+  };
+
+  const loadFriends = async () => {
+    const { ok, data } = await apiFetch('/friends');
+    if (ok && Array.isArray(data)) setFriendsList(data.map(normalizeUser));
+  };
+
+  const loadFriendRequests = async () => {
+    const { ok, data } = await apiFetch('/friends/requests');
+    if (ok && Array.isArray(data)) setFriendRequests(data.map(normalizeUser));
+  };
+
+  const loadFriendStatus = async () => {
+    const { ok, data } = await apiFetch('/friends/status');
+    if (ok && Array.isArray(data)) setFriendRelations(data);
+  };
+
+  const loadConversations = async () => {
+    const { ok, data } = await apiFetch('/conversations');
+    if (ok && Array.isArray(data)) {
+      setConversations(data.map(c => ({
+        ...normalizeUser(c),
+        lastMessage: c.lastMessage,
+        lastMessageAt: c.lastMessageAt,
+        lastMessageMine: c.lastMessageMine,
+        unreadCount: c.unreadCount || 0,
+      })));
+    }
+  };
+
+  const loadMatchCandidates = async () => {
+    setLoadingMatchCandidates(true);
+    const { ok, data } = await apiFetch('/matching/candidates');
+    if (ok && Array.isArray(data)) setMatchCandidates(data.map(normalizeUser));
+    setLoadingMatchCandidates(false);
+  };
+
+  // Enregistre un like/pass (POST /matching/swipe) et renvoie si ça forme un match mutuel -
+  // le résultat fait foi, plus de simulation aléatoire côté client.
+  const swipeUser = async (targetId, liked) => {
+    const { ok, data } = await apiFetch('/matching/swipe', {
+      method: 'POST', body: JSON.stringify({ targetId, liked }),
+    });
+    return ok && data.success ? !!data.matched : false;
+  };
+
+  // Charge tout d'un coup après connexion/inscription (annuaire, amis, demandes,
+  // statuts de relation, conversations) - le matching se charge séparément à
+  // l'ouverture de l'écran IA Matching (loadMatchCandidates), pas systématiquement.
+  const loadSocialLayer = () => {
+    loadDirectory();
+    loadFriends();
+    loadFriendRequests();
+    loadFriendStatus();
+    loadConversations();
+  };
+
+  // Statut de relation avec un utilisateur donné, dérivé de GET /friends/status (un seul
+  // appel pour tout l'annuaire plutôt qu'une requête par carte affichée).
+  const getRelationWith = (userId) => {
+    const rel = friendRelations.find(r => r.requesterId === userId || r.addresseeId === userId);
+    if (!rel) return null;
+    return { ...rel, iAmRequester: rel.requesterId === authUser?.id };
+  };
+
+  const sendFriendRequest = async (userId) => {
+    const { ok, data } = await apiFetch('/friends/request', {
+      method: 'POST', body: JSON.stringify({ userId }),
+    });
+    if (ok && data.success) {
+      addNotification(
+        data.status === 'accepted' ? 'Vous êtes maintenant amis ! 🎉' : "Demande d'ami envoyée",
+        'social'
+      );
+      loadFriends(); loadFriendRequests(); loadFriendStatus();
+    } else {
+      alert(data.error || "Erreur lors de l'envoi de la demande");
+    }
+  };
+
+  const acceptFriendRequest = async (relationId) => {
+    const { ok, data } = await apiFetch(`/friends/${relationId}/accept`, { method: 'POST' });
+    if (ok && data.success) {
+      addNotification('Nouvelle amitié ! 🎉', 'social');
+      loadFriends(); loadFriendRequests(); loadFriendStatus();
+    } else {
+      alert(data.error || 'Erreur');
+    }
+  };
+
+  const removeFriend = async (relationId) => {
+    const { ok, data } = await apiFetch(`/friends/${relationId}`, { method: 'DELETE' });
+    if (ok && data.success) {
+      loadFriends(); loadFriendRequests(); loadFriendStatus();
+    } else {
+      alert(data.error || 'Erreur');
+    }
+  };
 
   // ── ENVOI ZND RÉEL ──
   const sendZndToUser = async (toAddress, amount) => {
@@ -887,17 +1030,13 @@ const handleLogin = async () => {
           </View>
         </Marker>
       ))}
-      {MOCK_USERS.map(user => (
-        <Marker key={`user-${user.id}`}
-          coordinate={{ latitude: user.lat, longitude: user.lng }}
-          anchor={{ x: 0.5, y: 0.5 }}
-          onPress={() => screen === 'app' ? handleSelect(user, 'user') : null}>
-          <View style={styles.userNearbyMarker}>
-            <Text style={styles.userNearbyEmoji}>{user.avatar}</Text>
-            <View style={styles.userOnlineDot} />
-          </View>
-        </Marker>
-      ))}
+      {/* Les anciens pins "personnes à proximité" utilisaient MOCK_USERS avec des id
+          (1-4) qui entraient en collision avec de vrais id de comptes (SERIAL démarre
+          aussi à 1) : ouvrir un pin fictif pouvait déclencher un chat/ajout d'ami sur
+          un VRAI compte au même id. Le backend ne stocke aucune position géographique
+          pour les utilisateurs réels, donc ce layer disparaît plutôt que d'afficher de
+          fausses positions pour de vraies personnes. Découverte réelle : onglet Profil
+          (Amis / Découvrir) et IA Matching. */}
       {treasures.filter(tr => !tr.found).map(tr => (
         <Marker key={`treasure-${tr.id}`}
           coordinate={{ latitude: tr.lat, longitude: tr.lng }}
@@ -1266,7 +1405,9 @@ const handleLogin = async () => {
       </TouchableOpacity>
       <View style={styles.statsBar}>
         <View style={styles.statItem}>
-          <Text style={styles.statVal}>{MOCK_USERS.length}</Text>
+          {/* Pas de géolocalisation des utilisateurs côté backend : ce compteur est un
+              proxy (taille de la communauté), pas une vraie distance. */}
+          <Text style={styles.statVal}>{directoryUsers.length}</Text>
           <Text style={styles.statLabel}>{t('nearYou')}</Text>
         </View>
         <View style={styles.statDivider} />
@@ -1305,7 +1446,7 @@ const handleLogin = async () => {
       <TouchableOpacity style={styles.geoBtn} onPress={startRealLocation}>
         <Text style={styles.geoBtnText}>📍</Text>
       </TouchableOpacity>
-      <TouchableOpacity style={styles.matchBtn} onPress={() => setShowMatching(true)}>
+      <TouchableOpacity style={styles.matchBtn} onPress={() => { setShowMatching(true); loadMatchCandidates(); }}>
         <Text style={styles.matchBtnText}>🤖</Text>
       </TouchableOpacity>
       {/* BOUTON STORY */}
@@ -2009,7 +2150,11 @@ const handleLogin = async () => {
               <Text style={styles.matchScoreText}>{user.matchScore}% ✓</Text>
             </View>
             <Text style={styles.matchInterests}>
-              {user.commonInterests.map(i => EVENT_TYPES[i]?.emoji).join(' ')}
+              {/* INTEREST_MAP (constants/matching.js), pas EVENT_TYPES : ce sont deux
+                  taxonomies différentes (types d'events vs centres d'intérêt) - EVENT_TYPES
+                  ne connaît que sport/social/music/food/treasure/job et ne couvrait donc
+                  qu'une poignée d'intérêts réels, blanc pour tous les autres. */}
+              {user.commonInterests.map(i => INTEREST_MAP[i]?.emoji).filter(Boolean).join(' ')}
             </Text>
           </TouchableOpacity>
         ))}
@@ -2027,8 +2172,37 @@ const handleLogin = async () => {
       ))}
 
       <Text style={styles.sectionTitle}>👥 {t('friends')}</Text>
+      {friendRequests.length > 0 && (
+        <View style={{ marginBottom: 12 }}>
+          <Text style={styles.friendRequestsHint}>Demandes reçues</Text>
+          {friendRequests.map(user => (
+            <View key={user.id} style={styles.friendRequestRow}>
+              <Text style={{ fontSize: 24 }}>{user.avatar}</Text>
+              <Text style={styles.friendRequestName}>{user.name}</Text>
+              <TouchableOpacity style={styles.friendRequestAcceptBtn}
+                onPress={() => acceptFriendRequest(getRelationWith(user.id)?.relationId)}>
+                <Text style={styles.friendRequestAcceptText}>Accepter</Text>
+              </TouchableOpacity>
+            </View>
+          ))}
+        </View>
+      )}
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 16 }}>
+        {friendsList.length === 0 ? (
+          <Text style={styles.noResults}>Pas encore d'amis — découvre des personnes ci-dessous 👇</Text>
+        ) : friendsList.map(user => (
+          <TouchableOpacity key={user.id} style={styles.friendCard}
+            onPress={() => setShowProfile(user)}>
+            <Text style={styles.friendAvatar}>{user.avatar}</Text>
+            <Text style={styles.friendName}>{user.name}</Text>
+            <Text style={styles.friendScore}>⭐ {user.zndScore}</Text>
+          </TouchableOpacity>
+        ))}
+      </ScrollView>
+
+      <Text style={styles.sectionTitle}>🔍 Découvrir</Text>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 24 }}>
-        {MOCK_USERS.map(user => (
+        {directoryUsers.filter(u => !friendsList.some(f => f.id === u.id)).map(user => (
           <TouchableOpacity key={user.id} style={styles.friendCard}
             onPress={() => setShowProfile(user)}>
             <Text style={styles.friendAvatar}>{user.avatar}</Text>
@@ -2047,19 +2221,22 @@ const handleLogin = async () => {
   const renderMessages = () => (
     <View style={styles.tabContent}>
       <Text style={styles.tabTitle}>💬 {t('messages')}</Text>
-      <FlatList data={MOCK_MESSAGES} keyExtractor={item => item.id.toString()}
+      <FlatList data={conversations} keyExtractor={item => item.id.toString()}
+        ListEmptyComponent={<Text style={styles.noResults}>Aucune conversation pour l'instant</Text>}
         renderItem={({ item }) => (
           <TouchableOpacity style={styles.messageItem} onPress={() => setChatUser(item)}>
             <Text style={styles.messageAvatar}>{item.avatar}</Text>
             <View style={{ flex: 1 }}>
-              <Text style={styles.messageUser}>{item.user}</Text>
-              <Text style={styles.messagePreview} numberOfLines={1}>{item.text}</Text>
+              <Text style={styles.messageUser}>{item.name}</Text>
+              <Text style={styles.messagePreview} numberOfLines={1}>
+                {item.lastMessageMine ? 'Toi : ' : ''}{item.lastMessage}
+              </Text>
             </View>
             <View style={{ alignItems: 'flex-end' }}>
-              <Text style={styles.messageTime}>{item.time}</Text>
-              {item.unread > 0 && (
+              <Text style={styles.messageTime}>{formatMessageTime(item.lastMessageAt)}</Text>
+              {item.unreadCount > 0 && (
                 <View style={styles.unreadBadge}>
-                  <Text style={styles.unreadText}>{item.unread}</Text>
+                  <Text style={styles.unreadText}>{item.unreadCount}</Text>
                 </View>
               )}
             </View>
@@ -2738,6 +2915,10 @@ const renderMarket = () => (
   if (screen === 'register')    return renderRegister();
   if (screen === 'login')       return renderLogin();
 
+  // Statut de relation avec la personne actuellement affichée dans la modale de profil
+  // (utilisé par le bouton Ajouter/En attente/Accepter/Ami).
+  const profileRelation = showProfile ? getRelationWith(showProfile.id) : null;
+
   return (
     <View style={styles.container}>
       <StatusBar barStyle="light-content" />
@@ -2875,6 +3056,10 @@ const renderMarket = () => (
         visible={showMatching}
         onClose={() => setShowMatching(false)}
         currentUser={authUser}
+        profiles={matchCandidates}
+        loading={loadingMatchCandidates}
+        onSwipe={swipeUser}
+        onReload={loadMatchCandidates}
         onOpenChat={(profile) => { setShowMatching(false); setChatUser(profile); }}
         onMatch={(profile) => addNotification(`${profile.name} correspond à tes intérêts ! 👋`, 'match')}
       />
@@ -3018,10 +3203,12 @@ const renderMarket = () => (
               <Text style={styles.profileStatVal}>{showProfile.zndScore}</Text>
               <Text style={styles.profileStatLabel}>ZND</Text>
             </View>
-            <View style={styles.profileStat}>
-              <Text style={styles.profileStatVal}>{showProfile.friends}</Text>
-              <Text style={styles.profileStatLabel}>{t('friends')}</Text>
-            </View>
+            {showProfile.age != null && (
+              <View style={styles.profileStat}>
+                <Text style={styles.profileStatVal}>{showProfile.age}</Text>
+                <Text style={styles.profileStatLabel}>ans</Text>
+              </View>
+            )}
           </View>
           <View style={{ flexDirection: 'row', gap: 12, width: '100%' }}>
             <TouchableOpacity
@@ -3029,11 +3216,29 @@ const renderMarket = () => (
               onPress={() => { setShowProfile(null); setChatUser(showProfile); }}>
               <Text style={styles.cardJoinText}>💬 Message</Text>
             </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.cardJoinBtn, { flex: 1,
-                backgroundColor: 'rgba(107,33,168,0.3)' }]}>
-              <Text style={styles.cardJoinText}>💜 {t('add')}</Text>
-            </TouchableOpacity>
+            {profileRelation?.status === 'accepted' ? (
+              <TouchableOpacity
+                style={[styles.cardJoinBtn, { flex: 1, backgroundColor: 'rgba(16,185,129,0.25)' }]}
+                onPress={() => { removeFriend(profileRelation.relationId); setShowProfile(null); }}>
+                <Text style={styles.cardJoinText}>✓ Ami</Text>
+              </TouchableOpacity>
+            ) : profileRelation?.status === 'pending' && profileRelation.iAmRequester ? (
+              <View style={[styles.cardJoinBtn, { flex: 1, backgroundColor: 'rgba(255,255,255,0.06)' }]}>
+                <Text style={styles.cardJoinText}>⏳ En attente</Text>
+              </View>
+            ) : profileRelation?.status === 'pending' ? (
+              <TouchableOpacity
+                style={[styles.cardJoinBtn, { flex: 1, backgroundColor: 'rgba(107,33,168,0.3)' }]}
+                onPress={() => { acceptFriendRequest(profileRelation.relationId); setShowProfile(null); }}>
+                <Text style={styles.cardJoinText}>✅ Accepter</Text>
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity
+                style={[styles.cardJoinBtn, { flex: 1, backgroundColor: 'rgba(107,33,168,0.3)' }]}
+                onPress={() => sendFriendRequest(showProfile.id)}>
+                <Text style={styles.cardJoinText}>💜 {t('add')}</Text>
+              </TouchableOpacity>
+            )}
             <TouchableOpacity
               style={[styles.cardJoinBtn, { flex: 1,
                 backgroundColor: 'rgba(201,168,76,0.2)' }]}
@@ -3149,7 +3354,7 @@ const renderMarket = () => (
           text: messageText,
         }]);
         setMessageText('');
-        addNotification('Message envoye !', 'message');
+        loadConversations(); // fait apparaître/remonte ce contact dans l'onglet Messages
       }
     } catch (err) {
       alert('Erreur envoi message');
@@ -3270,14 +3475,6 @@ const styles = StyleSheet.create({
                        backgroundColor: '#C9A84C', borderRadius: 8,
                        paddingHorizontal: 4, paddingVertical: 1 },
   zndBadgeText:      { fontSize: 8, color: '#000', fontWeight: '700' },
-  userNearbyMarker:  { width: 36, height: 36, borderRadius: 18,
-                       backgroundColor: 'rgba(45,27,105,0.9)',
-                       borderWidth: 2, borderColor: 'rgba(167,139,250,0.5)',
-                       alignItems: 'center', justifyContent: 'center' },
-  userNearbyEmoji:   { fontSize: 18 },
-  userOnlineDot:     { position: 'absolute', bottom: 0, right: 0,
-                       width: 10, height: 10, borderRadius: 5,
-                       backgroundColor: '#10b981', borderWidth: 2, borderColor: '#080510' },
   myLocationMarker:  { width: 24, height: 24, alignItems: 'center', justifyContent: 'center' },
   myLocationDot:     { width: 14, height: 14, borderRadius: 7, backgroundColor: '#a78bfa' },
   myLocationRing:    { position: 'absolute', width: 28, height: 28, borderRadius: 14,
@@ -3482,6 +3679,14 @@ const styles = StyleSheet.create({
   friendAvatar:      { fontSize: 32 },
   friendName:        { fontSize: 12, color: '#e8e0f0', fontWeight: '600', marginTop: 4 },
   friendScore:       { fontSize: 10, color: '#C9A84C', marginTop: 2 },
+  friendRequestsHint: { fontSize: 12, color: '#9b8cb0', marginBottom: 8 },
+  friendRequestRow:  { flexDirection: 'row', alignItems: 'center', gap: 10,
+                       backgroundColor: 'rgba(255,255,255,0.03)', borderRadius: 12,
+                       padding: 10, marginBottom: 8 },
+  friendRequestName: { flex: 1, color: '#e8e0f0', fontWeight: '600', fontSize: 13 },
+  friendRequestAcceptBtn: { backgroundColor: '#6B21A8', borderRadius: 100,
+                       paddingHorizontal: 14, paddingVertical: 8 },
+  friendRequestAcceptText: { color: '#fff', fontSize: 12, fontWeight: '700' },
   messageItem:       { flexDirection: 'row', alignItems: 'center', gap: 12,
                        backgroundColor: 'rgba(255,255,255,0.03)', borderRadius: 12,
                        padding: 14, marginBottom: 8, borderWidth: 1,

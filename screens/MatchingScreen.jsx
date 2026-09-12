@@ -12,7 +12,7 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import {
   INTEREST_OPTIONS, INTEREST_MAP, LOOKING_FOR_OPTIONS, LOOKING_FOR_MAP,
-  MATCH_PROFILES, computeCompatibility, ageFromBirthdate,
+  computeCompatibility, ageFromBirthdate,
 } from '../constants/matching';
 
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
@@ -22,13 +22,16 @@ const SWIPE_THRESHOLD = SCREEN_W * 0.28;
 
 const DEFAULT_FILTERS = { minAge: 18, maxAge: 45, maxDistance: 50, lookingFor: 'all', interest: null };
 
-export default function MatchingScreen({ visible, onClose, currentUser, onOpenChat, onMatch }) {
+// `profiles` vient de GET /matching/candidates (vrais comptes) : `onSwipe(targetId, liked)`
+// doit renvoyer une Promise<boolean> résolue avec le `matched` renvoyé par
+// POST /matching/swipe (le match n'est plus simulé côté client). `onReload` redemande de
+// nouveaux candidats au parent (bouton "Recommencer").
+export default function MatchingScreen({ visible, onClose, currentUser, profiles = [], loading, onOpenChat, onMatch, onSwipe, onReload }) {
   const [filters, setFilters] = useState(DEFAULT_FILTERS);
   const [showFilters, setShowFilters] = useState(false);
   const [showDetail, setShowDetail] = useState(false);
   const [index, setIndex] = useState(0);
   const [matched, setMatched] = useState(null);
-  const [round, setRound] = useState(0); // incrémenté pour "recommencer" après épuisement du deck
 
   const position = useRef(new Animated.ValueXY()).current;
   const cardScale = useRef(new Animated.Value(1)).current;
@@ -39,17 +42,20 @@ export default function MatchingScreen({ visible, onClose, currentUser, onOpenCh
     lookingFor: currentUser?.lookingFor || 'friendship',
   }), [currentUser]);
 
+  // Les vrais profils n'ont pas forcément d'âge/de distance renseignés (pas de
+  // géolocalisation côté backend) : un champ absent ne doit pas exclure le candidat,
+  // seul un champ présent et hors filtre le fait.
   const deck = useMemo(() => {
-    return MATCH_PROFILES
-      .filter(p => p.age >= filters.minAge && p.age <= filters.maxAge)
-      .filter(p => p.distanceKm <= filters.maxDistance)
+    return profiles
+      .filter(p => p.age == null || (p.age >= filters.minAge && p.age <= filters.maxAge))
+      .filter(p => p.distanceKm == null || p.distanceKm <= filters.maxDistance)
       .filter(p => filters.lookingFor === 'all' || p.lookingFor === filters.lookingFor)
       .filter(p => !filters.interest || p.interests.includes(filters.interest))
       .map(p => ({ ...p, ...computeCompatibility(me, p) }))
       .sort((a, b) => b.score - a.score);
-  }, [filters, me, round]);
+  }, [filters, me, profiles]);
 
-  useEffect(() => { setIndex(0); }, [filters, round]);
+  useEffect(() => { setIndex(0); }, [filters, profiles]);
 
   const resetPosition = () => {
     // `position` est aussi piloté en JS par onPanResponderMove (useNativeDriver: false,
@@ -71,13 +77,16 @@ export default function MatchingScreen({ visible, onClose, currentUser, onOpenCh
     position.setValue({ x: 0, y: 0 });
     setShowDetail(false);
     setIndex(i => i + 1);
-    if (direction === 'right' && profile) handleLike(profile);
+    if (profile) recordSwipe(profile, direction === 'right');
   };
 
-  const handleLike = (profile, superLike = false) => {
-    const base = superLike ? 0.55 : 0.3;
-    const chance = base + (profile.score / 100) * 0.5;
-    if (Math.random() < chance) {
+  // Enregistre le like/pass côté serveur (POST /matching/swipe) - le match n'est plus
+  // une chance simulée localement : il n'est réel que si l'autre personne nous a
+  // également likés (mutuel), déterminé par le backend.
+  const recordSwipe = async (profile, liked) => {
+    if (!profile || !onSwipe) return;
+    const isMatch = await onSwipe(profile.id, liked);
+    if (liked && isMatch) {
       setMatched(profile);
       onMatch && onMatch(profile);
     }
@@ -142,13 +151,20 @@ export default function MatchingScreen({ visible, onClose, currentUser, onOpenCh
             <View style={styles.verifiedBadge}><Text style={styles.verifiedText}>✓ Vérifié</Text></View>
           )}
           <View style={styles.photoInfo}>
-            <Text style={styles.photoName}>{profile.name}, {profile.age}</Text>
-            <Text style={styles.photoMeta}>📍 {profile.city} · {profile.distanceKm}km</Text>
-            <View style={styles.lookingForChip}>
-              <Text style={styles.lookingForChipText}>
-                {LOOKING_FOR_MAP[profile.lookingFor]?.emoji} {LOOKING_FOR_MAP[profile.lookingFor]?.label}
+            <Text style={styles.photoName}>{profile.name}{profile.age ? `, ${profile.age}` : ''}</Text>
+            {(profile.city || profile.distanceKm != null) && (
+              <Text style={styles.photoMeta}>
+                {[profile.city && `📍 ${profile.city}`, profile.distanceKm != null && `${profile.distanceKm}km`]
+                  .filter(Boolean).join(' · ')}
               </Text>
-            </View>
+            )}
+            {LOOKING_FOR_MAP[profile.lookingFor] && (
+              <View style={styles.lookingForChip}>
+                <Text style={styles.lookingForChipText}>
+                  {LOOKING_FOR_MAP[profile.lookingFor].emoji} {LOOKING_FOR_MAP[profile.lookingFor].label}
+                </Text>
+              </View>
+            )}
           </View>
           {isTop && (
             <TouchableOpacity style={styles.infoBtn} onPress={() => setShowDetail(v => !v)}>
@@ -213,7 +229,12 @@ export default function MatchingScreen({ visible, onClose, currentUser, onOpenCh
           </View>
 
           <View style={styles.deckArea}>
-            {!current ? (
+            {loading ? (
+              <View style={styles.emptyState}>
+                <Text style={styles.emptyEmoji}>⏳</Text>
+                <Text style={styles.emptyTitle}>Recherche de profils compatibles...</Text>
+              </View>
+            ) : !current ? (
               <View style={styles.emptyState}>
                 <Text style={styles.emptyEmoji}>🔍</Text>
                 <Text style={styles.emptyTitle}>Plus de profils pour l'instant</Text>
@@ -222,7 +243,7 @@ export default function MatchingScreen({ visible, onClose, currentUser, onOpenCh
                   <Text style={styles.emptyBtnText}>Ajuster mes filtres</Text>
                 </TouchableOpacity>
                 <TouchableOpacity style={[styles.emptyBtn, styles.emptyBtnGhost]}
-                  onPress={() => setRound(r => r + 1)}>
+                  onPress={() => onReload && onReload()}>
                   <Text style={styles.emptyBtnGhostText}>Recommencer</Text>
                 </TouchableOpacity>
               </View>
@@ -240,7 +261,12 @@ export default function MatchingScreen({ visible, onClose, currentUser, onOpenCh
                 <Text style={styles.actionBtnText}>✕</Text>
               </TouchableOpacity>
               <TouchableOpacity style={[styles.actionBtn, styles.superBtn]}
-                onPress={() => { handleLike(current, true); setIndex(i => i + 1); setShowDetail(false); }}>
+                onPress={() => {
+                  const profile = current;
+                  setIndex(i => i + 1);
+                  setShowDetail(false);
+                  recordSwipe(profile, true);
+                }}>
                 <Text style={styles.actionBtnText}>⭐</Text>
               </TouchableOpacity>
               <TouchableOpacity style={[styles.actionBtn, styles.likeBtn]} onPress={() => forceSwipe('right')}>
