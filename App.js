@@ -9,6 +9,7 @@ import { Linking } from 'react-native';
 import VALTDashboard from './screens/VALTDashboard';
 import CreatePledgeScreen from './screens/CreatePledgeScreen';
 import { GenerateQRScreen, ScanQRScreen } from './screens/QRScreen';
+import MatchingScreen from './screens/MatchingScreen';
 import { walletService } from './services/valtService';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
@@ -198,35 +199,6 @@ const EVENT_TYPES = {
   treasure: { emoji: '💎', color: '#C9A84C', label: 'treasure' },
   job:      { emoji: '💼', color: '#3b82f6', label: 'job'      },
 };
-
-// Doit rester synchronisé avec INTEREST_KEYS / LOOKING_FOR_KEYS côté serveur (server.js) —
-// le serveur filtre déjà toute clé absente de ces listes.
-const INTEREST_OPTIONS = [
-  { key: 'sport', emoji: '⚽', label: 'Sport' },
-  { key: 'music', emoji: '🎵', label: 'Musique' },
-  { key: 'travel', emoji: '✈️', label: 'Voyage' },
-  { key: 'reading', emoji: '📚', label: 'Lecture' },
-  { key: 'cooking', emoji: '🍳', label: 'Cuisine' },
-  { key: 'gaming', emoji: '🎮', label: 'Gaming' },
-  { key: 'art', emoji: '🎨', label: 'Art' },
-  { key: 'nature', emoji: '🌿', label: 'Nature' },
-  { key: 'fitness', emoji: '💪', label: 'Fitness' },
-  { key: 'photography', emoji: '📷', label: 'Photo' },
-  { key: 'dancing', emoji: '💃', label: 'Danse' },
-  { key: 'tech', emoji: '💻', label: 'Tech' },
-  { key: 'animals', emoji: '🐾', label: 'Animaux' },
-  { key: 'fashion', emoji: '👗', label: 'Mode' },
-  { key: 'movies', emoji: '🎬', label: 'Films' },
-  { key: 'party', emoji: '🎉', label: 'Soirées' },
-];
-const INTEREST_MAP = Object.fromEntries(INTEREST_OPTIONS.map(i => [i.key, i]));
-
-const LOOKING_FOR_OPTIONS = [
-  { key: 'friendship', emoji: '🤝', label: 'Amitié' },
-  { key: 'serious', emoji: '❤️', label: 'Relation sérieuse' },
-  { key: 'casual', emoji: '✨', label: 'Rencontre' },
-];
-const LOOKING_FOR_MAP = Object.fromEntries(LOOKING_FOR_OPTIONS.map(l => [l.key, l]));
 
 const MOCK_EVENTS = [
   { id: 1, type: 'sport', title: 'Match de foot',
@@ -2764,47 +2736,13 @@ const renderMarket = () => (
       </Modal>
 
       {/* MODAL IA MATCHING */}
-      <Modal visible={showMatching} animationType="slide" transparent>
-        <View style={styles.modalOverlay}>
-          <View style={[styles.modalContent, { maxHeight: '85%' }]}>
-            <View style={styles.tabHeader}>
-              <Text style={styles.tabTitle}>🤖 IA Matching</Text>
-              <TouchableOpacity onPress={() => setShowMatching(false)}>
-                <Text style={styles.searchClose}>✕</Text>
-              </TouchableOpacity>
-            </View>
-            <View style={styles.walletInfoBox}>
-              <Text style={styles.walletInfoText}>
-                Basé sur tes intérêts : {authUser?.interests?.map(i => EVENT_TYPES[i]?.emoji).join(' ')}
-              </Text>
-              <Text style={styles.walletInfoSub}>L'IA analyse la compatibilité en temps réel</Text>
-            </View>
-            <FlatList data={matchSuggestions} keyExtractor={item => item.id.toString()}
-              renderItem={({ item }) => (
-                <View style={styles.matchListItem}>
-                  <Text style={{ fontSize: 36 }}>{item.avatar}</Text>
-                  <View style={{ flex: 1 }}>
-                    <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-                      <Text style={styles.matchListName}>{item.name}</Text>
-                      <View style={styles.matchScoreBadge}>
-                        <Text style={styles.matchScoreText}>{item.matchScore}%</Text>
-                      </View>
-                    </View>
-                    <Text style={styles.matchListBio}>{item.bio}</Text>
-                    <Text style={styles.matchListDist}>📍 {item.distance} · ⭐ {item.zndScore} ZND</Text>
-                    <View style={{ flexDirection: 'row', gap: 6, marginTop: 4 }}>
-                      {item.commonInterests.map(i => (
-                        <View key={i} style={styles.interestTag}>
-                          <Text style={styles.interestTagText}>{EVENT_TYPES[i]?.emoji} {i}</Text>
-                        </View>
-                      ))}
-                    </View>
-                  </View>
-                </View>
-              )} />
-          </View>
-        </View>
-      </Modal>
+      <MatchingScreen
+        visible={showMatching}
+        onClose={() => setShowMatching(false)}
+        currentUser={authUser}
+        onOpenChat={(profile) => { setShowMatching(false); setChatUser(profile); }}
+        onMatch={(profile) => addNotification(`${profile.name} correspond à tes intérêts ! 👋`, 'match')}
+      />
 
       {/* MODAL BUSINESS DASHBOARD */}
       <Modal visible={showBusinessDash} animationType="slide" transparent>
