@@ -34,7 +34,7 @@ export default function MatchingScreen({ visible, onClose, currentUser, onOpenCh
   const cardScale = useRef(new Animated.Value(1)).current;
 
   const me = useMemo(() => ({
-    age: ageFromBirthdate(currentUser?.birthdate) || 27,
+    age: currentUser?.age || ageFromBirthdate(currentUser?.birthdate) || 27,
     interests: currentUser?.interests || ['sport', 'social'],
     lookingFor: currentUser?.lookingFor || 'friendship',
   }), [currentUser]);

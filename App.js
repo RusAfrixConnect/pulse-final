@@ -10,13 +10,28 @@ import VALTDashboard from './screens/VALTDashboard';
 import CreatePledgeScreen from './screens/CreatePledgeScreen';
 import { GenerateQRScreen, ScanQRScreen } from './screens/QRScreen';
 import MatchingScreen from './screens/MatchingScreen';
+import EditProfileScreen from './screens/EditProfileScreen';
+import { LOOKING_FOR_MAP } from './constants/matching';
 import { walletService } from './services/valtService';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const AUTH_TOKEN_KEY = 'pulse_auth_token';
+// Le backend ne stocke pas encore la bio (pas de colonne `bio`) : on la garde en local,
+// par utilisateur, pour qu'elle survive aux reconnexions sur le même appareil.
+const BIO_STORAGE_PREFIX = 'pulse_bio_';
 const getAuthHeaders = async () => {
   const token = await AsyncStorage.getItem(AUTH_TOKEN_KEY);
   return token ? { Authorization: `Bearer ${token}` } : {};
+};
+// Complète le user renvoyé par /register ou /login avec les champs de matching
+// (fallback si l'utilisateur n'a encore rien renseigné) et la bio locale.
+const hydrateAuthUser = async (user, walletAddress) => {
+  const interests = Array.isArray(user.interests) && user.interests.length
+    ? user.interests : ['sport', 'social'];
+  const lookingFor = Array.isArray(user.lookingFor) && user.lookingFor.length
+    ? user.lookingFor[0] : 'friendship';
+  const bio = (await AsyncStorage.getItem(`${BIO_STORAGE_PREFIX}${user.id}`)) || '';
+  return { ...user, walletAddress, interests, lookingFor, bio };
 };
 // Persiste l'adresse wallet VALT côté serveur (users.wallet_address) une fois résolue,
 // pour qu'elle survienne à une reconnexion sur un autre appareil.
@@ -340,6 +355,8 @@ export default function App() {
     { id: 5, type: 'match', text: 'Sofia correspond à tes intérêts ! 👋', time: '2h', read: true },
   ]);
  const [showMatching, setShowMatching]   = useState(false);
+ const [showEditProfile, setShowEditProfile] = useState(false);
+ const [savingProfile, setSavingProfile]     = useState(false);
  const [showNotifs, setShowNotifs] = useState(false);
  // STORIES
 const [stories, setStories]               = useState([
@@ -544,8 +561,9 @@ const handleRegister = async () => {
       const walletAddress = data.user.walletAddress || await walletService.getAddress();
       console.log('[handleRegister] walletAddress résolu =', walletAddress);
       if (!data.user.walletAddress) persistWalletAddress(walletAddress);
-      setAuthUser({ ...data.user, walletAddress, interests: ['sport', 'social'] });
-      generateMatches(['sport', 'social']);
+      const hydrated = await hydrateAuthUser(data.user, walletAddress);
+      setAuthUser(hydrated);
+      generateMatches(hydrated.interests);
       setScreen('app');
     } else {
       console.log('[handleRegister] échec côté serveur, data.error =', data.error);
@@ -589,8 +607,9 @@ const handleLogin = async () => {
       const walletAddress = data.user.walletAddress || await walletService.getAddress();
       console.log('[handleLogin] walletAddress résolu =', walletAddress);
       if (!data.user.walletAddress) persistWalletAddress(walletAddress);
-      setAuthUser({ ...data.user, walletAddress, interests: ['sport', 'job'] });
-      generateMatches(['sport', 'job']);
+      const hydrated = await hydrateAuthUser(data.user, walletAddress);
+      setAuthUser(hydrated);
+      generateMatches(hydrated.interests);
       setScreen('app');
     } else {
       console.log('[handleLogin] échec côté serveur, data.error =', data.error);
@@ -633,6 +652,33 @@ const handleLogin = async () => {
     setIsTracking(false);
     clearInterval(earnInterval.current);
     setScreen('map_preview');
+  };
+
+  // Enregistre le profil de matching (âge, intérêts, objectif) côté serveur via
+  // /users/profile, et la bio en local (pas encore de colonne `bio` côté backend).
+  const saveProfile = async ({ age, bio, interests, lookingFor }) => {
+    setSavingProfile(true);
+    try {
+      const response = await fetch(`${API_URL}/users/profile`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...(await getAuthHeaders()) },
+        body: JSON.stringify({ age, interests, lookingFor: [lookingFor], city: authUser?.city }),
+      });
+      const data = await response.json();
+      if (data.success) {
+        setAuthUser(prev => ({ ...prev, ...data.user, lookingFor, bio }));
+        if (authUser?.id) await AsyncStorage.setItem(`${BIO_STORAGE_PREFIX}${authUser.id}`, bio || '');
+        generateMatches(interests);
+        addNotification('Profil mis à jour ✅', 'social');
+        setShowEditProfile(false);
+      } else {
+        alert(data.error || 'Erreur lors de la mise à jour du profil');
+      }
+    } catch (err) {
+      alert('Erreur connexion serveur : ' + err.message);
+    } finally {
+      setSavingProfile(false);
+    }
   };
 
   const handleSelect = (item, type) => {
@@ -1843,8 +1889,22 @@ const handleLogin = async () => {
     <ScrollView style={styles.tabContent}>
       <View style={styles.profileHero}>
         <Text style={styles.profileAvatar}>🧑</Text>
-        <Text style={styles.profileName}>{authUser?.name || 'Mon Profil'}</Text>
-        <Text style={styles.profileBio}>Explorateur ZND & créateur d'events 🌍</Text>
+        <Text style={styles.profileName}>
+          {authUser?.name || 'Mon Profil'}{authUser?.age ? `, ${authUser.age}` : ''}
+        </Text>
+        <Text style={styles.profileBio}>
+          {authUser?.bio || "Explorateur ZND & créateur d'events 🌍"}
+        </Text>
+        {authUser?.lookingFor && (
+          <View style={styles.lookingForBadge}>
+            <Text style={styles.lookingForBadgeText}>
+              {LOOKING_FOR_MAP[authUser.lookingFor]?.emoji} {LOOKING_FOR_MAP[authUser.lookingFor]?.label}
+            </Text>
+          </View>
+        )}
+        <TouchableOpacity style={styles.editProfileBtn} onPress={() => setShowEditProfile(true)}>
+          <Text style={styles.editProfileBtnText}>✏️ Modifier mon profil</Text>
+        </TouchableOpacity>
         <View style={styles.profileStats}>
           <View style={styles.profileStat}>
             <Text style={styles.profileStatVal}>{authUser?.znd || 0}</Text>
@@ -2744,6 +2804,15 @@ const renderMarket = () => (
         onMatch={(profile) => addNotification(`${profile.name} correspond à tes intérêts ! 👋`, 'match')}
       />
 
+      {/* MODAL ÉDITION PROFIL */}
+      <EditProfileScreen
+        visible={showEditProfile}
+        onClose={() => setShowEditProfile(false)}
+        currentUser={authUser}
+        onSave={saveProfile}
+        saving={savingProfile}
+      />
+
       {/* MODAL BUSINESS DASHBOARD */}
       <Modal visible={showBusinessDash} animationType="slide" transparent>
         <View style={styles.modalOverlay}>
@@ -3290,6 +3359,12 @@ const styles = StyleSheet.create({
   profileAvatar:     { fontSize: 72, marginBottom: 8 },
   profileName:       { fontSize: 24, fontWeight: '800', color: '#fff' },
   profileBio:        { fontSize: 14, color: '#9b8cb0', marginTop: 4, textAlign: 'center' },
+  lookingForBadge:   { backgroundColor: 'rgba(107,33,168,0.35)', borderRadius: 100,
+    paddingHorizontal: 12, paddingVertical: 5, marginTop: 10 },
+  lookingForBadgeText: { color: '#e8e0f0', fontSize: 12, fontWeight: '600' },
+  editProfileBtn:    { marginTop: 12, borderWidth: 1, borderColor: 'rgba(167,139,250,0.4)',
+    borderRadius: 100, paddingHorizontal: 16, paddingVertical: 8 },
+  editProfileBtnText: { color: '#a78bfa', fontSize: 13, fontWeight: '600' },
   profileStats:      { flexDirection: 'row', gap: 24, marginTop: 16 },
   profileStat:       { alignItems: 'center' },
   profileStatVal:    { fontSize: 20, fontWeight: '700', color: '#a78bfa' },
